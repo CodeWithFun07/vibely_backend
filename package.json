@@ -1,0 +1,27 @@
+{
+  "name": "vibely_backend",
+  "version": "1.0.0",
+  "description": "this is the full stack web application like social media platform",
+  "license": "ISC",
+  "author": "Siddique Ahmed",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.9.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "datauri": "^4.1.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.5.0",
+    "multer": "^2.1.1",
+    "nodemailer": "^8.0.5",
+    "redis": "^5.12.1"
+  }
+}
