@@ -92,6 +92,7 @@ class LikeService {
 
       return {
         isLiked,
+        reactionType: isLiked ? reactionType : null,
         message: isLiked ? `${targetType} liked` : `${targetType} unliked`,
       };
     } catch (error) {

@@ -367,7 +367,7 @@ class UserService {
    * old_password
    * new_password
    */
-  async updatePassword({ userId, old_password, new_password }) {
+  async updatePassword({ userId, old_password, new_password,confirm_password }) {
     if (!userId || !old_password || !new_password) {
       throw new ApiError(
         400,
@@ -380,6 +380,10 @@ class UserService {
         400,
         "New password must be at least 6 characters long",
       );
+    }
+
+    if(new_password !== confirm_password){
+      throw new ApiError(400,"Password do not match")
     }
 
     const user = await User.findById(userId);

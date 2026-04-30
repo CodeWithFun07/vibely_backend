@@ -21,7 +21,7 @@ class CommentService {
           target_type: "Comment" 
         }).populate({
           path: "liked_by",
-          select: "_id username profile.profile_picture"
+          select: "_id username profile.profile_picture profile.full_name"
         });
 
         // Get user's like status if userId provided
@@ -37,29 +37,38 @@ class CommentService {
 
         // Group likes by reaction type for display
         const likesByReaction = {};
-        likes.forEach(like => {
+        const likesArray = likes.map(like => {
+          const userObj = like.liked_by.toObject ? like.liked_by.toObject() : like.liked_by;
+          const likeObj = {
+            _id: userObj._id,
+            username: userObj.username,
+            profile_picture: userObj.profile?.profile_picture || null,
+            full_name: userObj.profile?.full_name || null,
+            reaction_type: like.reaction_type,
+            createdAt: like.createdAt,
+          };
+          
+          // Add to likesByReaction
           if (!likesByReaction[like.reaction_type]) {
             likesByReaction[like.reaction_type] = [];
           }
           likesByReaction[like.reaction_type].push({
-            _id: like.liked_by._id,
-            username: like.liked_by.username,
-            profile_picture: like.liked_by.profile?.profile_picture,
+            _id: userObj._id,
+            username: userObj.username,
+            profile_picture: userObj.profile?.profile_picture || null,
+            full_name: userObj.profile?.full_name || null,
           });
+          
+          return likeObj;
         });
 
         const result = {
           ...commentObj,
           isLiked,
           reaction_type,
-          likes: likes.map(like => ({
-            _id: like.liked_by._id,
-            username: like.liked_by.username,
-            profile_picture: like.liked_by.profile?.profile_picture,
-            reaction_type: like.reaction_type,
-            createdAt: like.createdAt,
-          })),
+          likes: likesArray,
           likesByReaction,
+          likes_count: likesArray.length,
         };
 
         // Handle replies recursively

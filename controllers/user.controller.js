@@ -120,12 +120,13 @@ const resetPassword = asyncHandler(async (req, res) => {
 // update password
 const updatePassword = asyncHandler(async (req, res) => {
   const userId = req.userId; // Assuming userId is added to req.user by auth middleware
-  const { old_password, new_password } = req.body;
+  const { old_password, new_password,confirm_password } = req.body;
 
   const result = await userService.updatePassword({
     userId,
     old_password,
     new_password,
+    confirm_password
   });
 
   return res.status(200).json(new ApiResponse(true, result.message, 200, null));

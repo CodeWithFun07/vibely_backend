@@ -37,6 +37,19 @@ class NotificationService {
         throw new ApiError(404, "Recipient not found");
       }
 
+      // Initialize notification_preferences if not exist (for legacy users)
+      if (!recipient.notification_preferences) {
+        recipient.notification_preferences = {
+          likes: true,
+          comments: true,
+          follows: true,
+          mentions: true,
+          posts: true,
+          messages: true,
+        };
+        await recipient.save();
+      }
+
       // Map notification type to preference field
       const preferenceMap = {
         like: "likes",
@@ -57,6 +70,22 @@ class NotificationService {
         return null;
       }
 
+      // Generate notification message based on type
+      let notificationMessage = options.message || "";
+      if (!notificationMessage) {
+        const sender = await User.findById(senderId).select("username");
+        const messageMap = {
+          like: `${sender?.username || "Someone"} liked your post`,
+          comment: `${sender?.username || "Someone"} commented on your post`,
+          follow: `${sender?.username || "Someone"} followed you`,
+          reply: `${sender?.username || "Someone"} replied to your comment`,
+          mention: `${sender?.username || "Someone"} mentioned you`,
+          message: options.message || "You have a new message",
+          post: `${sender?.username || "Someone"} posted something`,
+        };
+        notificationMessage = messageMap[type] || "";
+      }
+
       const notification = await Notification.create({
         recipient: recipientId,
         sender: senderId,
@@ -64,7 +93,7 @@ class NotificationService {
         post: options.post || null,
         comment: options.comment || null,
         chat: options.chat || null,
-        message: options.message || "",
+        message: notificationMessage,
         action_url: options.action_url || null,
       });
 
