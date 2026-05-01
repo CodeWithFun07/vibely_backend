@@ -74,6 +74,17 @@ const toggleLike = asyncHandler(async (req, res) => {
       console.error("Error fetching updated post:", error);
       // If there's an error fetching updated post, just return the like toggle result
     }
+  } else if (targetType === "Comment") {
+    try {
+      const commentService = (await import("../services/comment.service.js")).default;
+      const updatedComment = await commentService.getCommentById(targetId, userId);
+      responseData = {
+        ...result,
+        comment: updatedComment,
+      };
+    } catch (error) {
+      console.error("Error fetching updated comment:", error);
+    }
   }
 
   return res.status(200).json(

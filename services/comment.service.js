@@ -3,6 +3,8 @@ import Post from "../models/post.model.js";
 import User from "../models/user.model.js";
 import Like from "../models/like.model.js";
 import ApiError from "../utils/apiError.js";
+import { extractMentions, getUserIdsFromUsernames } from "../utils/mentionHelper.js";
+import notificationService from "./notification.service.js";
 
 class CommentService {
   /**
@@ -144,6 +146,16 @@ class CommentService {
         "created_by",
         "_id username email profile.full_name profile.profile_picture",
       );
+
+      // Handle mentions
+      const mentionedUsernames = extractMentions(content);
+      if (mentionedUsernames.length > 0) {
+        const mentionedUserIds = await getUserIdsFromUsernames(mentionedUsernames);
+        await notificationService.notifyMentions(mentionedUserIds, userId, {
+          post: postId,
+          comment: comment._id,
+        });
+      }
 
       return populatedComment;
     } catch (error) {
@@ -334,6 +346,35 @@ class CommentService {
         throw error;
       }
       throw new ApiError(500, `Failed to fetch comments: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get a single comment by ID with status
+   * @param {string} commentId - Comment ID
+   * @param {string} userId - Current user ID (for isLiked)
+   * @returns {Object} - Comment with status
+   */
+  async getCommentById(commentId, userId) {
+    if (!commentId) {
+      throw new ApiError(400, "Comment ID is required");
+    }
+
+    try {
+      const comment = await Comment.findById(commentId).populate(
+        "created_by",
+        "_id username email profile.full_name profile.profile_picture",
+      );
+
+      if (!comment) {
+        throw new ApiError(404, "Comment not found");
+      }
+
+      const populated = await this._populateCommentStatus([comment], userId);
+      return populated[0];
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(500, `Failed to get comment: ${error.message}`);
     }
   }
 }

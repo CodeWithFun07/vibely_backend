@@ -79,7 +79,7 @@ class NotificationService {
           comment: `${sender?.username || "Someone"} commented on your post`,
           follow: `${sender?.username || "Someone"} followed you`,
           reply: `${sender?.username || "Someone"} replied to your comment`,
-          mention: `${sender?.username || "Someone"} mentioned you`,
+          mention: `mentioned you in a ${options.comment ? "comment" : "post"}`,
           message: options.message || "You have a new message",
           post: `${sender?.username || "Someone"} posted something`,
         };
@@ -354,6 +354,29 @@ class NotificationService {
         `Failed to fetch unread count: ${error.message}`,
       );
     }
+  }
+
+  /**
+   * Notify mentioned users
+   * @param {Array<string>} userIds - User IDs mentioned
+   * @param {string} senderId - User ID who mentioned them
+   * @param {Object} options - { post, comment }
+   */
+  async notifyMentions(userIds, senderId, options = {}) {
+    if (!userIds || userIds.length === 0) return;
+
+    console.log(`Notifying ${userIds.length} mentioned users from sender ${senderId}`);
+
+    const promises = userIds
+      .filter((id) => id !== senderId) // Don't notify yourself
+      .map((recipientId) => {
+        console.log(`Creating mention notification for ${recipientId}`);
+        return this.createNotification(recipientId, senderId, "mention", options).catch(
+          (err) => console.error("Mention notification error:", err.message),
+        );
+      });
+
+    await Promise.all(promises);
   }
 }
 

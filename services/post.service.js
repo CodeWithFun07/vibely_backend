@@ -9,6 +9,8 @@ import {
   uploadMultipleToCloudinary,
   deleteFromCloudinary,
 } from "../utils/cloudinaryUpload.js";
+import { extractMentions, getUserIdsFromUsernames } from "../utils/mentionHelper.js";
+import notificationService from "./notification.service.js";
 
 class PostService {
   /**
@@ -180,6 +182,15 @@ class PostService {
         "username avatar",
       );
 
+      // Handle mentions
+      const mentionedUsernames = extractMentions(caption);
+      if (mentionedUsernames.length > 0) {
+        const mentionedUserIds = await getUserIdsFromUsernames(mentionedUsernames);
+        await notificationService.notifyMentions(mentionedUserIds, userId, {
+          post: post._id,
+        });
+      }
+
       return populatedPost;
     } catch (error) {
       // Clean up uploaded media if post creation fails
@@ -346,6 +357,15 @@ class PostService {
         "created_by",
         "username profile.profile_picture",
       );
+
+      // Handle mentions on update
+      const mentionedUsernames = extractMentions(caption);
+      if (mentionedUsernames.length > 0) {
+        const mentionedUserIds = await getUserIdsFromUsernames(mentionedUsernames);
+        await notificationService.notifyMentions(mentionedUserIds, userId, {
+          post: populatedPost._id,
+        });
+      }
 
       return populatedPost;
     } catch (error) {

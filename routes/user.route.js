@@ -20,6 +20,7 @@ import {
   getMyProfile,
   getUserProfile,
   searchUsers,
+  searchUserForMention,
   getUserPosts,
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -75,6 +76,7 @@ router
 router.route("/logout").post(isAuthenticated, logout); // checked
 
 router.route("/search-user").get(isAuthenticated, searchUsers);
+router.route("/search-user-for-mention").get(isAuthenticated, searchUserForMention);
 
 router.route("/user-profile/:identifier").get(isAuthenticated, getUserProfile);
 

@@ -275,13 +275,23 @@ const searchUsers = asyncHandler(async (req, res) => {
     parseInt(page),
     parseInt(limit),
   );
-
   return res.status(200).json(
     new ApiResponse(true, result.message, 200, {
       users: result.users,
       pagination: result.pagination,
     }),
   );
+});
+
+const searchUserForMention = asyncHandler(async (req, res) => {
+  const { query } = req.query;
+  const currentUserId = req.userId;
+
+  const result = await userService.searchUserForMention(query, currentUserId);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(true, result.message, 200, { users: result.users }));
 });
 
 const getUserPosts = asyncHandler(async (req, res) => {
@@ -360,6 +370,7 @@ export {
   getMyProfile,
   getUserProfile,
   searchUsers,
+  searchUserForMention,
   getUserPosts,
   getNotificationPreferences,
   updateNotificationPreferences,

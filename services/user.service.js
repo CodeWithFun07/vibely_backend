@@ -813,10 +813,21 @@ class UserService {
       followed_by: userId,
     });
 
+    // Get blocked users to handle mentions visibility in frontend
+    const blockedRelations = await Block.find({
+      blocked_by: userId,
+      isActive: true,
+    }).populate("blocked_user", "username");
+
+    const blockedUsernames = blockedRelations
+      .map((rel) => rel.blocked_user?.username)
+      .filter(Boolean);
+
     return {
       message: "Profile retrieved successfully",
       user: {
         ...user.toObject(),
+        blocked_usernames: blockedUsernames,
         stats: {
           postsCount,
           bookmarksCount,
@@ -872,10 +883,11 @@ class UserService {
     }
 
     // Get user posts count
+    const isOwnProfile = currentUserId && currentUserId.toString() === user._id.toString();
     const postsCount = await Post.countDocuments({
       created_by: user._id,
       isDeleted: false,
-      visibility: { $in: ["public", "followers"] }, // Only show public posts for other users
+      ...(isOwnProfile ? {} : { visibility: { $in: ["public", "followers"] } }),
     });
 
     // Get user public/followers posts (last 5)
@@ -1000,14 +1012,64 @@ class UserService {
     }));
 
     return {
-      message: "Users found successfully",
       users: usersWithFlags,
       pagination: {
-        currentPage: page,
-        totalPages,
         totalUsers,
+        totalPages,
+        currentPage: page,
         limit,
       },
+      message: "Users fetched successfully",
+    };
+  }
+
+  /**
+   * Search users for mentions (followers and following)
+   * @param {string} query Search query
+   * @param {string} currentUserId Current user ID
+   */
+  async searchUserForMention(query, currentUserId) {
+    if (!currentUserId) {
+      throw new ApiError(401, "Authentication required");
+    }
+
+    // 1. Find people current user follows
+    const following = await Follow.find({ followed_by: currentUserId }).select(
+      "following",
+    );
+    const followingIds = following.map((f) => f.following);
+
+    // 2. Find people who follow current user
+    const followers = await Follow.find({ following: currentUserId }).select(
+      "followed_by",
+    );
+    const followerIds = followers.map((f) => f.followed_by);
+
+    // Combine unique IDs
+    const relatedUserIds = [...new Set([...followingIds, ...followerIds])];
+
+    // 3. Search within these users
+    const searchQuery = {
+      _id: { $in: relatedUserIds, $ne: currentUserId }, // Exclude self
+      isDeleted: false,
+    };
+
+    if (query) {
+      searchQuery.$or = [
+        { username: { $regex: query, $options: "i" } },
+        { "profile.full_name": { $regex: query, $options: "i" } },
+      ];
+    }
+
+    const users = await User.find(searchQuery)
+      .select(
+        "username profile.full_name profile.profile_picture is_online is_verified",
+      )
+      .limit(10);
+
+    return {
+      users,
+      message: "Mention suggestions fetched successfully",
     };
   }
 
