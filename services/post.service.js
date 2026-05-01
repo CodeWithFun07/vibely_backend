@@ -20,11 +20,11 @@ class PostService {
     return await Promise.all(
       posts.map(async (post) => {
         const postObj = post.toObject ? post.toObject() : post;
-        
+
         // Get all likes for this post with user details
-        const likes = await Like.find({ 
-          liked: postObj._id, 
-          target_type: "Post" 
+        const likes = await Like.find({
+          liked: postObj._id,
+          target_type: "Post"
         }).populate({
           path: "liked_by",
           select: "_id username profile.profile_picture profile.full_name"
@@ -34,7 +34,7 @@ class PostService {
         let userLike = null;
         let isLiked = false;
         let reaction_type = null;
-        
+
         if (userId) {
           userLike = likes.find(like => like.liked_by._id.toString() === userId.toString());
           isLiked = !!userLike;
@@ -42,10 +42,10 @@ class PostService {
         }
 
         // Get bookmark status
-        const bookmark = userId ? await Bookmark.findOne({ 
-          bookmark_by: userId, 
-          post_id: postObj._id, 
-          isActive: true 
+        const bookmark = userId ? await Bookmark.findOne({
+          bookmark_by: userId,
+          post_id: postObj._id,
+          isActive: true
         }) : null;
 
         // Group likes by reaction type for display
@@ -60,7 +60,7 @@ class PostService {
             reaction_type: like.reaction_type,
             createdAt: like.createdAt,
           };
-          
+
           // Add to likesByReaction
           if (!likesByReaction[like.reaction_type]) {
             likesByReaction[like.reaction_type] = [];
@@ -71,7 +71,7 @@ class PostService {
             profile_picture: userObj.profile?.profile_picture || null,
             full_name: userObj.profile?.full_name || null,
           });
-          
+
           return likeObj;
         });
 
@@ -414,6 +414,7 @@ class PostService {
    * Get all posts for feed
    * Filters: non-deleted, non-draft, from active & verified users
    * Excludes: blocked users, banned users
+   * Visibility: respects post visibility settings
    * @param {string} userId - Current user ID
    * @param {number} page - Page number (default: 1)
    * @param {number} limit - Posts per page (default: 10)
@@ -435,6 +436,15 @@ class PostService {
         block.blocked_user.toString(),
       );
 
+      // Get users the current user is following (for followers visibility)
+      const following = await Follow.find({
+        followed_by: userId,
+      }).select("following");
+
+      const followingIds = following.map((follow) =>
+        follow.following.toString(),
+      );
+
       // Calculate skip for pagination
       const skip = (page - 1) * limit;
 
@@ -444,6 +454,21 @@ class PostService {
         isDraft: false,
         // Exclude blocked users
         created_by: { $nin: blockedUserIds },
+        // Visibility filter: show public posts OR posts created by current user OR posts where visibility allows current user to see
+        $or: [
+          { visibility: "public" },
+          { created_by: userId }, // Show own posts regardless of visibility
+          {
+            visibility: "followers",
+            created_by: { $in: followingIds }, // Show followers posts only if user follows the creator
+          },
+          // Note: close_friends visibility would need additional logic for close friends relationships
+          // For now, treating as followers-only
+          {
+            visibility: "close_friends",
+            created_by: { $in: followingIds },
+          },
+        ],
       };
 
       // Find posts
@@ -508,8 +533,37 @@ class PostService {
     }
 
     try {
-      // Find the post
-      const post = await Post.findById(postId)
+      // First check if post exists and get basic info
+      const post = await Post.findById(postId).lean();
+      if (!post) {
+        throw new ApiError(404, "Post not found");
+      }
+
+      // Check visibility permissions
+      const isOwnPost = post.created_by.toString() === userId;
+
+      if (!isOwnPost) {
+        // If not own post, check visibility permissions
+        if (post.visibility === "private") {
+          throw new ApiError(403, "You don't have permission to view this post");
+        }
+
+        if (post.visibility === "followers" || post.visibility === "close_friends") {
+          // Check if current user follows the post creator
+          const followRelationship = await Follow.findOne({
+            followed_by: userId,
+            following: post.created_by,
+          });
+
+          if (!followRelationship) {
+            throw new ApiError(403, "You don't have permission to view this post");
+          }
+        }
+        // Public posts are accessible to everyone
+      }
+
+      // If we reach here, user has permission to view the post
+      const fullPost = await Post.findById(postId)
         .populate({
           path: "created_by",
           match: {
@@ -523,17 +577,17 @@ class PostService {
         })
         .lean();
 
-      if (!post) {
+      if (!fullPost) {
         throw new ApiError(404, "Post not found");
       }
 
-      if (!post.created_by) {
+      if (!fullPost.created_by) {
         throw new ApiError(404, "Post creator is no longer active");
       }
 
       // Use _populatePostStatus to get complete post data with likes
-      const postsWithStatus = await this._populatePostStatus([post], userId);
-      
+      const postsWithStatus = await this._populatePostStatus([fullPost], userId);
+
       return postsWithStatus[0];
     } catch (error) {
       if (error instanceof ApiError) {
@@ -576,7 +630,16 @@ class PostService {
         block.blocked_user.toString(),
       );
 
-      // Build query
+      // Get users the current user is following (for followers visibility)
+      const following = await Follow.find({
+        followed_by: userId,
+      }).select("following");
+
+      const followingIds = following.map((follow) =>
+        follow.following.toString(),
+      );
+
+      // Build query with visibility filter
       const query = {
         isDeleted: false,
         isDraft: false,
@@ -584,6 +647,20 @@ class PostService {
           $in: followerIds,
           $nin: blockedUserIds,
         },
+        // Visibility filter: show public posts OR posts created by current user OR posts where visibility allows current user to see
+        $or: [
+          { visibility: "public" },
+          { created_by: userId }, // Show own posts regardless of visibility
+          {
+            visibility: "followers",
+            created_by: { $in: followingIds }, // Show followers posts only if user follows the creator
+          },
+          // Note: close_friends visibility would need additional logic for close friends relationships
+          {
+            visibility: "close_friends",
+            created_by: { $in: followingIds },
+          },
+        ],
       };
 
       // Find posts
@@ -664,7 +741,7 @@ class PostService {
         block.blocked_user.toString(),
       );
 
-      // Build query
+      // Build query with visibility filter
       const query = {
         isDeleted: false,
         isDraft: false,
@@ -672,6 +749,20 @@ class PostService {
           $in: followingIds,
           $nin: blockedUserIds,
         },
+        // Visibility filter: show public posts OR posts created by current user OR posts where visibility allows current user to see
+        $or: [
+          { visibility: "public" },
+          { created_by: userId }, // Show own posts regardless of visibility
+          {
+            visibility: "followers",
+            created_by: { $in: followingIds }, // Show followers posts only if user follows the creator
+          },
+          // Note: close_friends visibility would need additional logic for close friends relationships
+          {
+            visibility: "close_friends",
+            created_by: { $in: followingIds },
+          },
+        ],
       };
 
       // Find posts
@@ -771,6 +862,106 @@ class PostService {
         throw error;
       }
       throw new ApiError(500, `Failed to fetch user posts: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get posts for a specific user's profile (public view)
+   * Used when viewing another user's profile page
+   * @param {string} profileOwnerId - The user whose profile is being viewed
+   * @param {string} viewerId - The current user viewing the profile (null if not logged in)
+   * @param {number} page - Page number
+   * @param {number} limit - Posts per page
+   * @returns {Object} - { posts, pagination }
+   */
+  async getUserProfilePosts(profileOwnerId, viewerId, page = 1, limit = 20) {
+    if (!profileOwnerId) {
+      throw new ApiError(400, "Profile owner ID is required");
+    }
+
+    try {
+      const skip = (page - 1) * limit;
+
+      // Check if viewing own profile
+      const isOwnProfile = viewerId && profileOwnerId === viewerId;
+
+      // Build visibility query based on who is viewing
+      let visibilityFilter = {};
+
+      if (isOwnProfile) {
+        // Own profile - show all posts (public, followers, close_friends, private)
+        visibilityFilter = {};
+      } else if (viewerId) {
+        // Another user's profile - check if viewer follows the profile owner
+        const followRelationship = await Follow.findOne({
+          followed_by: viewerId,
+          following: profileOwnerId,
+        });
+
+        const isFollowing = !!followRelationship;
+
+        if (isFollowing) {
+          // Following - show public + followers + close_friends posts
+          visibilityFilter = {
+            $or: [
+              { visibility: "public" },
+              { visibility: "followers" },
+              { visibility: "close_friends" },
+            ],
+          };
+        } else {
+          // Not following - show only public posts
+          visibilityFilter = {
+            visibility: "public",
+          };
+        }
+      } else {
+        // Not logged in - show only public posts
+        visibilityFilter = {
+          visibility: "public",
+        };
+      }
+
+      // Build final query
+      const query = {
+        created_by: profileOwnerId,
+        isDeleted: false,
+        ...visibilityFilter,
+      };
+
+      const posts = await Post.find(query)
+        .populate(
+          "created_by",
+          "_id username email profile.full_name profile.profile_picture followers_count following_count posts_count",
+        )
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+      const totalPosts = await Post.countDocuments(query);
+      const totalPages = Math.ceil(totalPosts / limit);
+
+      // Populate status
+      const postsWithStatus = viewerId
+        ? await this._populatePostStatus(posts, viewerId)
+        : posts;
+
+      return {
+        posts: postsWithStatus,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalPosts,
+          postsPerPage: limit,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      };
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(500, `Failed to fetch user profile posts: ${error.message}`);
     }
   }
 
@@ -895,10 +1086,22 @@ class PostService {
       const isOwnProfile = targetUserId === userId;
       let canViewPosts = isOwnProfile;
 
+      const idBlocked = await Block.findOne({
+        $or: [
+          { blocked_by: userId, blocked_user: targetUserId },
+          { blocked_by: targetUserId, blocked_user: userId },
+        ],
+        isActive: true,
+      });
+
+      if (idBlocked) {
+        throw new ApiError(401, "You are blocked from this user");
+      }
+
       if (!canViewPosts) {
         // Check if target user's account is private
         const targetUser = await User.findById(targetUserId).select("is_private");
-        
+
         if (targetUser?.is_private) {
           // Check if current user is a follower
           const Follow = (await import("../models/follow.model.js")).default;
@@ -930,10 +1133,44 @@ class PostService {
 
       const skip = (page - 1) * limit;
 
+      // Build visibility filter based on who is viewing
+      let visibilityFilter = {};
+
+      if (isOwnProfile) {
+        // Own profile - show all posts (public, followers, close_friends, private)
+        visibilityFilter = {};
+      } else {
+        // Another user's profile - check if viewer follows the profile owner
+        const Follow = (await import("../models/follow.model.js")).default;
+        const followRelationship = await Follow.findOne({
+          followed_by: userId,
+          following: targetUserId,
+        });
+
+        const isFollowing = !!followRelationship;
+
+        if (isFollowing) {
+          // Following - show public + followers + close_friends posts
+          visibilityFilter = {
+            $or: [
+              { visibility: "public" },
+              { visibility: "followers" },
+              { visibility: "close_friends" },
+            ],
+          };
+        } else {
+          // Not following - show only public posts
+          visibilityFilter = {
+            visibility: "public",
+          };
+        }
+      }
+
       const query = {
         created_by: targetUserId,
         isDeleted: false,
         isDraft: false,
+        ...visibilityFilter,
       };
 
       const posts = await Post.find(query)

@@ -10,6 +10,7 @@ import {
   getCurrentUserPost,
   bookmarkUnBookmarkPost,
   sharePost,
+  getUserPosts,
 } from "../controllers/post.controller.js";
 import isAuthenticated from "../middlewares/auth.middleware.js";
 import { uploadMultipleFiles } from "../middlewares/multer.js";
@@ -53,6 +54,9 @@ route
   .put(isAuthenticated, bookmarkUnBookmarkPost);
 
 route.route("/share/:postId").post(isAuthenticated, sharePost);
+
+// Get posts for a specific user's profile (public view)
+route.route("/user/:userId").get(isAuthenticated, getUserPosts);
 
 // This must be last - catch-all for /:postId
 route.route("/:postId").get(isAuthenticated, getPostById);

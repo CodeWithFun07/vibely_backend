@@ -14,6 +14,9 @@ const toggleLike = asyncHandler(async (req, res) => {
   const { targetId, targetType, reactionType } = req.body;
   const userId = req.userId;
 
+  // DEBUG: log incoming toggle like payload
+  console.debug('[like.controller] toggleLike payload:', { targetId, targetType, reactionType, userId });
+
   const result = await likeService.toggleLike(
     targetId,
     targetType,

@@ -17,7 +17,7 @@ const isAuthenticated = async (req, res, next) => {
     next();
   } catch (error) {
     console.log("authenticated verification failed", error.message);
-    return res.status(401).json(new ApiError(401, error.message));
+    return res.status(401).json(new ApiResponse(false, error.message || "Unauthorized", 401, null));
   }
 };
 

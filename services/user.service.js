@@ -367,7 +367,12 @@ class UserService {
    * old_password
    * new_password
    */
-  async updatePassword({ userId, old_password, new_password,confirm_password }) {
+  async updatePassword({
+    userId,
+    old_password,
+    new_password,
+    confirm_password,
+  }) {
     if (!userId || !old_password || !new_password) {
       throw new ApiError(
         400,
@@ -382,8 +387,8 @@ class UserService {
       );
     }
 
-    if(new_password !== confirm_password){
-      throw new ApiError(400,"Password do not match")
+    if (new_password !== confirm_password) {
+      throw new ApiError(400, "Password do not match");
     }
 
     const user = await User.findById(userId);
@@ -450,11 +455,11 @@ class UserService {
     }
 
     // Update profile fields
-    if (full_name  !== undefined) user.profile.full_name = full_name;
-    if (bio        !== undefined) user.profile.bio       = bio;
-    if (address    !== undefined) user.profile.address   = address;
-    if (website    !== undefined) user.profile.website   = website;
-    if (gender     !== undefined) user.profile.gender    = gender;
+    if (full_name !== undefined) user.profile.full_name = full_name;
+    if (bio !== undefined) user.profile.bio = bio;
+    if (address !== undefined) user.profile.address = address;
+    if (website !== undefined) user.profile.website = website;
+    if (gender !== undefined) user.profile.gender = gender;
 
     // Update privacy setting
     if (is_private !== undefined) user.is_private = is_private;
@@ -469,14 +474,16 @@ class UserService {
 
       if (user.profile.profile_picture_public_id) {
         try {
-          await cloudinary.uploader.destroy(user.profile.profile_picture_public_id);
+          await cloudinary.uploader.destroy(
+            user.profile.profile_picture_public_id,
+          );
         } catch (error) {
           console.log("profile picture delete failed", error);
         }
       }
 
-      user.profile.profile_picture            = profile_pic_url.secure_url;
-      user.profile.profile_picture_public_id  = profile_pic_url.public_id;
+      user.profile.profile_picture = profile_pic_url.secure_url;
+      user.profile.profile_picture_public_id = profile_pic_url.public_id;
     }
 
     // Upload cover picture
@@ -489,14 +496,16 @@ class UserService {
 
       if (user.profile.cover_picture_public_id) {
         try {
-          await cloudinary.uploader.destroy(user.profile.cover_picture_public_id);
+          await cloudinary.uploader.destroy(
+            user.profile.cover_picture_public_id,
+          );
         } catch (error) {
           console.log("cover picture delete failed", error);
         }
       }
 
-      user.profile.cover_picture            = cover_pic_url.secure_url;
-      user.profile.cover_picture_public_id  = cover_pic_url.public_id;
+      user.profile.cover_picture = cover_pic_url.secure_url;
+      user.profile.cover_picture_public_id = cover_pic_url.public_id;
     }
 
     await user.save();
@@ -636,6 +645,8 @@ class UserService {
     allow_follow,
     is_private,
     message_privacy,
+    who_can_see_followers,
+    who_can_see_following,
   }) {
     if (!userId) {
       throw new ApiError(400, "User ID is required");
@@ -662,6 +673,20 @@ class UserService {
       user.message_privacy = message_privacy;
     }
 
+    if (
+      who_can_see_followers &&
+      ["everyone", "followers", "no_one"].includes(who_can_see_followers)
+    ) {
+      user.who_can_see_followers = who_can_see_followers;
+    }
+
+    if (
+      who_can_see_following &&
+      ["everyone", "followers", "no_one"].includes(who_can_see_following)
+    ) {
+      user.who_can_see_following = who_can_see_following;
+    }
+
     await user.save();
 
     return {
@@ -670,6 +695,8 @@ class UserService {
         allow_follow: user.allow_follow,
         is_private: user.is_private,
         message_privacy: user.message_privacy,
+        who_can_see_followers: user.who_can_see_followers,
+        who_can_see_following: user.who_can_see_following,
       },
     };
   }
@@ -826,6 +853,24 @@ class UserService {
       throw new ApiError(404, "User not found");
     }
 
+    const isBlocked = await Block.findOne({
+      $or: [
+        {
+          blocked_by: currentUserId,
+          blocked_user: user._id,
+        },
+        {
+          blocked_by: user._id,
+          blocked_user: currentUserId,
+        },
+      ],
+      isActive: true,
+    });
+
+    if (isBlocked) {
+      throw new ApiError(400, "You can't view this profile");
+    }
+
     // Get user posts count
     const postsCount = await Post.countDocuments({
       created_by: user._id,
@@ -899,13 +944,13 @@ class UserService {
     const blockedRelations = await Block.find({
       $or: [
         { blocked_by: currentUserId }, // Current user blocked someone
-        { user_id: currentUserId }, // Someone blocked current user
+        { blocked_user: currentUserId }, // Someone blocked current user
       ],
-    }).select("blocked_by user_id");
+    }).select("blocked_by blocked_user");
 
     // Extract blocked user IDs
     const blockedUserIds = blockedRelations
-      .flatMap((b) => [b.blocked_by, b.user_id])
+      .flatMap((b) => [b.blocked_by, b.blocked_user])
       .filter((id) => id.toString() !== currentUserId.toString());
 
     const query = {
@@ -931,13 +976,15 @@ class UserService {
       .lean();
 
     // Check if current user is following each found user
-    const userIds = users.map(u => u._id);
+    const userIds = users.map((u) => u._id);
     const followingRecords = await Follow.find({
       followed_by: currentUserId,
-      following: { $in: userIds }
+      following: { $in: userIds },
     }).select("following");
 
-    const followingSet = new Set(followingRecords.map(r => r.following.toString()));
+    const followingSet = new Set(
+      followingRecords.map((r) => r.following.toString()),
+    );
 
     // Get total count for pagination
     const totalUsers = await User.countDocuments(query);
@@ -947,9 +994,9 @@ class UserService {
     // Add indicators to each user
     const usersWithFlags = users.map((user) => ({
       ...user,
-      isPrivate:   user.is_private || false,
-      isVerified:  user.is_verified || false,
-      isFollowing: followingSet.has(user._id.toString())
+      isPrivate: user.is_private || false,
+      isVerified: user.is_verified || false,
+      isFollowing: followingSet.has(user._id.toString()),
     }));
 
     return {
@@ -983,9 +1030,7 @@ class UserService {
     })
       .populate({
         path: "post_id",
-        populate: [
-          { path: "created_by", select: "username profile" }
-        ],
+        populate: [{ path: "created_by", select: "username profile" }],
       })
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -994,10 +1039,10 @@ class UserService {
 
     // Map to return just the post objects (flattening the bookmark record)
     const bookmarkedPosts = bookmarks
-      .filter(b => b.post_id && !b.post_id.isDeleted)
-      .map(b => ({
+      .filter((b) => b.post_id && !b.post_id.isDeleted)
+      .map((b) => ({
         ...b.post_id,
-        is_bookmarked: true
+        is_bookmarked: true,
       }));
 
     // Get total bookmarks count
@@ -1111,7 +1156,9 @@ class UserService {
     }
 
     try {
-      const user = await User.findById(userId).select("notification_preferences");
+      const user = await User.findById(userId).select(
+        "notification_preferences",
+      );
       if (!user) {
         throw new ApiError(404, "User not found");
       }
@@ -1149,16 +1196,14 @@ class UserService {
         userId,
         {
           notification_preferences: {
-            likes:
-              preferences.likes !== undefined ? preferences.likes : true,
+            likes: preferences.likes !== undefined ? preferences.likes : true,
             comments:
               preferences.comments !== undefined ? preferences.comments : true,
             follows:
               preferences.follows !== undefined ? preferences.follows : true,
             mentions:
               preferences.mentions !== undefined ? preferences.mentions : true,
-            posts:
-              preferences.posts !== undefined ? preferences.posts : true,
+            posts: preferences.posts !== undefined ? preferences.posts : true,
             messages:
               preferences.messages !== undefined ? preferences.messages : true,
           },

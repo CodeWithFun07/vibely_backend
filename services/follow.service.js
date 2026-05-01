@@ -1,5 +1,6 @@
 import Follow from "../models/follow.model.js";
 import User from "../models/user.model.js";
+import Block from "../models/block.model.js";
 import ApiError from "../utils/apiError.js";
 
 class FollowService {
@@ -108,6 +109,22 @@ class FollowService {
     try {
       const skip = (page - 1) * limit;
 
+      // Get blocked users (users that blocked current user OR users current user blocked)
+      const blockedRecords = await Block.find({
+        $or: [
+          { blocked_by: userId }, // Users I blocked
+          { blocked_user: userId }, // Users who blocked me
+        ],
+        isActive: true,
+      });
+
+      // Create set of blocked user IDs
+      const blockedUserIds = new Set();
+      blockedRecords.forEach((record) => {
+        blockedUserIds.add(record.blocked_by.toString());
+        blockedUserIds.add(record.blocked_user.toString());
+      });
+
       // Get all followers (who follow current user)
       const followers = await Follow.find({
         following: userId,
@@ -127,9 +144,9 @@ class FollowService {
         .limit(limit)
         .lean();
 
-      // Filter out null results (users that don't match criteria)
+      // Filter out null results and blocked users
       const validFollowers = followers
-        .filter((f) => f.followed_by !== null)
+        .filter((f) => f.followed_by !== null && !blockedUserIds.has(f.followed_by._id.toString()))
         .map((f) => f.followed_by);
 
       // Get total count
@@ -173,6 +190,22 @@ class FollowService {
     try {
       const skip = (page - 1) * limit;
 
+      // Get blocked users (users that blocked current user OR users current user blocked)
+      const blockedRecords = await Block.find({
+        $or: [
+          { blocked_by: userId }, // Users I blocked
+          { blocked_user: userId }, // Users who blocked me
+        ],
+        isActive: true,
+      });
+
+      // Create set of blocked user IDs
+      const blockedUserIds = new Set();
+      blockedRecords.forEach((record) => {
+        blockedUserIds.add(record.blocked_by.toString());
+        blockedUserIds.add(record.blocked_user.toString());
+      });
+
       // Get all users current user is following
       const following = await Follow.find({
         followed_by: userId,
@@ -192,9 +225,9 @@ class FollowService {
         .limit(limit)
         .lean();
 
-      // Filter out null results
+      // Filter out null results and blocked users
       const validFollowing = following
-        .filter((f) => f.following !== null)
+        .filter((f) => f.following !== null && !blockedUserIds.has(f.following._id.toString()))
         .map((f) => f.following);
 
       // Get total count

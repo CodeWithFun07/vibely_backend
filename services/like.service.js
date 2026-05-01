@@ -39,6 +39,8 @@ class LikeService {
     }
 
     try {
+      // DEBUG: log received reactionType at service layer
+      console.debug('[like.service] toggleLike called', { targetId, targetType, userId, reactionType });
       // Verify target exists
       const TargetModel = targetType === "Post" ? Post : Comment;
       const target = await TargetModel.findById(targetId);

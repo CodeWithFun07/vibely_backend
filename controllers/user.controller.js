@@ -196,13 +196,21 @@ const verifyUserActivation = asyncHandler(async (req, res) => {
 // update privacy settings
 const updatePrivacySettings = asyncHandler(async (req, res) => {
   const userId = req.userId; // Assuming userId is added to req.user by auth middleware
-  const { allow_follow, is_private, message_privacy } = req.body;
+  const {
+    allow_follow,
+    is_private,
+    message_privacy,
+    who_can_see_followers,
+    who_can_see_following,
+  } = req.body;
 
   const result = await userService.updatePrivacySettings({
     userId,
     allow_follow,
     is_private,
     message_privacy,
+    who_can_see_followers,
+    who_can_see_following,
   });
 
   return res

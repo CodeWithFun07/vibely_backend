@@ -85,6 +85,40 @@ const userSchema = new Schema(
       enum: ["everyone", "followers", "no_one"],
       default: "everyone",
     },
+    who_can_see_followers: {
+      type: String,
+      enum: ["everyone", "followers", "no_one"],
+      default: "everyone",
+    },
+    who_can_see_following: {
+      type: String,
+      enum: ["everyone", "followers", "no_one"],
+      default: "everyone",
+    },
+    is_like_notifications_enabled: {
+      type: Boolean,
+      default: true,
+    },
+    is_comment_notifications_enabled: {
+      type: Boolean,
+      default: true,
+    },
+    is_follow_notifications_enabled: {
+      type: Boolean,
+      default: true,
+    },
+    is_post_notifications_enabled: {
+      type: Boolean,
+      default: true,
+    },
+    is_message_notifications_enabled: {
+      type: Boolean,
+      default: true,
+    },
+    is_message_notifications_enabled: {
+      type: Boolean,
+      default: true,
+    },
 
     // Denormalization for performance
     followers_count: {

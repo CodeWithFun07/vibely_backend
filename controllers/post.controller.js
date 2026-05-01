@@ -219,6 +219,38 @@ const getCurrentUserPost = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * Get posts for a specific user's profile (public view)
+ * Used when viewing another user's profile page
+ */
+const getUserPosts = asyncHandler(async (req, res) => {
+  const { userId: profileOwnerId } = req.params;
+  const viewerId = req.userId || null; // null if not logged in
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+
+  if (page < 1) {
+    throw new ApiError(400, "Page must be greater than 0");
+  }
+  if (limit < 1 || limit > 50) {
+    throw new ApiError(400, "Limit must be between 1 and 50");
+  }
+
+  const result = await postService.getUserProfilePosts(
+    profileOwnerId,
+    viewerId,
+    page,
+    limit
+  );
+
+  return res.status(200).json(
+    new ApiResponse(true, "Profile posts fetched successfully", 200, {
+      posts:      result.posts,
+      pagination: result.pagination,
+    }),
+  );
+});
+
 const bookmarkUnBookmarkPost = asyncHandler(async (req, res) => {
   const { id: postId } = req.params;
   const userId = req.userId;
@@ -257,4 +289,5 @@ export {
   getCurrentUserPost,
   bookmarkUnBookmarkPost,
   sharePost,
+  getUserPosts,
 };
