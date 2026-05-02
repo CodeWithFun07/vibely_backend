@@ -7,6 +7,7 @@ import { Server } from "socket.io";
 import setupSocket from "./socket/socketHandler.js";
 import { registerIO } from "./socket/socketEmitter.js";
 
+
 // import routes
 import userRoutes from "./routes/user.route.js";
 import postRoutes from "./routes/post.route.js";
