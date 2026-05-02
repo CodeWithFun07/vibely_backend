@@ -97,7 +97,13 @@ class NotificationService {
         action_url: options.action_url || null,
       });
 
-      return notification;
+      // Populate sender data for real-time notifications
+      const populatedNotification = await Notification.findById(notification._id)
+        .populate('sender', 'username profile.profile_picture')
+        .populate('post', 'content')
+        .populate('comment', 'content');
+
+      return populatedNotification;
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;

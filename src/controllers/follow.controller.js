@@ -1,6 +1,7 @@
 import asyncHandler from "../utils/asyncHandler.js";
 import followService from "../services/follow.service.js";
 import notificationService from "../services/notification.service.js";
+import { emitNotification } from "../socket/socketEmitter.js";
 import ApiResponse from "../utils/apiResponse.js";
 import ApiError from "../utils/apiError.js";
 
@@ -17,11 +18,15 @@ const followUnfollowUser = asyncHandler(async (req, res) => {
   // Create notification if following
   if (result.isFollowing) {
     try {
-      await notificationService.createNotification(
+      const notification = await notificationService.createNotification(
         targetUserId,
         userId,
         "follow",
       );
+      // Emit real-time notification
+      if (notification) {
+        emitNotification(targetUserId, notification);
+      }
     } catch (error) {
       console.log("Notification error (non-critical):", error.message);
     }

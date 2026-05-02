@@ -1,6 +1,7 @@
 import asyncHandler from "../utils/asyncHandler.js";
 import commentService from "../services/comment.service.js";
 import notificationService from "../services/notification.service.js";
+import { emitNotification } from "../socket/socketEmitter.js";
 import Post from "../models/post.model.js";
 import ApiResponse from "../utils/apiResponse.js";
 import ApiError from "../utils/apiError.js";
@@ -30,24 +31,32 @@ const createComment = asyncHandler(async (req, res) => {
       const parentComment = await Comment.findById(parentCommentId).populate("created_by");
       const commentOwnerId = parentComment?.created_by?._id;
       if (commentOwnerId && commentOwnerId.toString() !== userId) {
-        await notificationService.createNotification(
+        const notification = await notificationService.createNotification(
           commentOwnerId,
           userId,
           "reply",
           { post: postId, comment: parentCommentId }
         );
+        // Emit real-time notification
+        if (notification) {
+          emitNotification(commentOwnerId.toString(), notification);
+        }
       }
     } else {
       // Regular comment notification - notify post owner
       const post = await Post.findById(postId).populate("created_by");
       const postOwnerId = post?.created_by?._id;
       if (postOwnerId && postOwnerId.toString() !== userId) {
-        await notificationService.createNotification(
+        const notification = await notificationService.createNotification(
           postOwnerId,
           userId,
           "comment",
           { post: postId, comment: result._id }
         );
+        // Emit real-time notification
+        if (notification) {
+          emitNotification(postOwnerId.toString(), notification);
+        }
       }
     }
   } catch (error) {

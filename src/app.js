@@ -5,6 +5,7 @@ import cors from "cors";
 import errorHandler from "./utils/errorHandler.js";
 import { Server } from "socket.io";
 import setupSocket from "./socket/socketHandler.js";
+import { registerIO } from "./socket/socketEmitter.js";
 
 // import routes
 import userRoutes from "./routes/user.route.js";
@@ -55,6 +56,7 @@ const io = new Server(server, {
 });
 
 setupSocket(io);
+registerIO(io);
 
 app.use(cors(corsOptions));
 app.use(express.json());

@@ -1,6 +1,7 @@
 import asyncHandler from "../utils/asyncHandler.js";
 import postService from "../services/post.service.js";
 import notificationService from "../services/notification.service.js";
+import { emitNotificationToMultiple } from "../socket/socketEmitter.js";
 import User from "../models/user.model.js";
 import Follow from "../models/follow.model.js";
 import ApiResponse from "../utils/apiResponse.js";
@@ -38,17 +39,29 @@ const createPost = asyncHandler(async (req, res) => {
     // Get all followers using Follow model
     const followers = await Follow.find({ following: userId }).select("followed_by");
     if (followers && followers.length > 0) {
+      const followerIds = followers.map(f => f.followed_by.toString());
+      
       // Create notification for each follower
-      await Promise.all(
+      const createdNotifications = await Promise.all(
         followers.map(follow =>
           notificationService.createNotification(
             follow.followed_by,
             userId,
             "post",
             { post: result._id }
-          ).catch(err => console.log("Notification error (non-critical):", err.message))
+          ).catch(err => {
+            console.log("Notification error (non-critical):", err.message);
+            return null;
+          })
         )
       );
+      
+      // Emit real-time notifications to followers
+      createdNotifications.forEach((notification) => {
+        if (notification) {
+          emitNotificationToMultiple([notification.recipient.toString()], notification);
+        }
+      });
     }
   } catch (error) {
     console.log("Notification error (non-critical):", error.message);

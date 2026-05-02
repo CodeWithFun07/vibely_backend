@@ -2,6 +2,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 import likeService from "../services/like.service.js";
 import postService from "../services/post.service.js";
 import notificationService from "../services/notification.service.js";
+import { emitNotification } from "../socket/socketEmitter.js";
 import ApiResponse from "../utils/apiResponse.js";
 import ApiError from "../utils/apiError.js";
 
@@ -31,12 +32,16 @@ const toggleLike = asyncHandler(async (req, res) => {
       const postOwnerId = post?.created_by?._id;
       // Only notify if the liker is not the post owner
       if (postOwnerId && postOwnerId.toString() !== userId) {
-        await notificationService.createNotification(
+        const notification = await notificationService.createNotification(
           postOwnerId,
           userId,
           "like",
           { post: targetId }
         );
+        // Emit real-time notification
+        if (notification) {
+          emitNotification(postOwnerId.toString(), notification);
+        }
       }
     } catch (error) {
       console.log("Notification error (non-critical):", error.message);
@@ -48,12 +53,16 @@ const toggleLike = asyncHandler(async (req, res) => {
       const commentOwnerId = comment?.created_by?._id;
       // Only notify if the liker is not the comment owner
       if (commentOwnerId && commentOwnerId.toString() !== userId) {
-        await notificationService.createNotification(
+        const notification = await notificationService.createNotification(
           commentOwnerId,
           userId,
           "like",
           { comment: targetId }
         );
+        // Emit real-time notification
+        if (notification) {
+          emitNotification(commentOwnerId.toString(), notification);
+        }
       }
     } catch (error) {
       console.log("Notification error (non-critical):", error.message);
