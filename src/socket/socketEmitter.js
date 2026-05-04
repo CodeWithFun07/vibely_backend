@@ -99,4 +99,89 @@ export const emitNotificationToMultiple = (recipientIds, notification) => {
   }
 };
 
-export default { registerIO, emitNotification, broadcastOnlineStatus, emitNotificationToMultiple };
+export const emitMessageToChat = (chatId, message) => {
+  if (!io) {
+    console.warn("⚠️ Socket.IO not initialized. Cannot emit chat message.");
+    return;
+  }
+
+  try {
+    io.to(chatId.toString()).emit("message received", message);
+    console.log(`📩 Message emitted to chat room ${chatId}`);
+  } catch (error) {
+    console.error("Error emitting chat message:", error);
+  }
+};
+
+export const emitMessageToParticipants = (participantIds, message) => {
+  if (!io) {
+    console.warn("⚠️ Socket.IO not initialized. Cannot emit message to participants.");
+    return;
+  }
+
+  try {
+    participantIds.forEach((id) => {
+      io.to(id.toString()).emit("message received", message);
+    });
+    console.log(`📩 Message emitted to ${participantIds.length} participants`);
+  } catch (error) {
+    console.error("Error emitting message to participants:", error);
+  }
+};
+
+/**
+ * When a message is deleted for everyone (or similarly patched), notify everyone in the chat room.
+ */
+export const emitChatMessageMutation = (chatId, payload) => {
+  if (!io) {
+    console.warn("⚠️ Socket.IO not initialized. Cannot emit message mutation.");
+    return;
+  }
+  try {
+    io.to(chatId.toString()).emit("message mutated", payload);
+  } catch (error) {
+    console.error("Error emitting message mutated:", error);
+  }
+};
+
+export const emitMessageSeen = (chatId, seenPayload) => {
+  if (!io) {
+    console.warn("⚠️ Socket.IO not initialized. Cannot emit message seen update.");
+    return;
+  }
+
+  try {
+    io.to(chatId.toString()).emit("message seen", seenPayload);
+    console.log(`👀 Message seen update emitted to chat room ${chatId}`);
+  } catch (error) {
+    console.error("Error emitting message seen update:", error);
+  }
+};
+
+export const emitChatCreated = (recipientIds, chat) => {
+  if (!io) {
+    console.warn("⚠️ Socket.IO not initialized. Cannot emit chat created event.");
+    return;
+  }
+
+  try {
+    recipientIds.forEach((recipientId) => {
+      io.to(recipientId.toString()).emit("chat created", chat);
+    });
+    console.log(`🆕 Chat created event emitted to ${recipientIds.length} users`);
+  } catch (error) {
+    console.error("Error emitting chat created event:", error);
+  }
+};
+
+export default {
+  registerIO,
+  emitNotification,
+  broadcastOnlineStatus,
+  emitNotificationToMultiple,
+  emitMessageToChat,
+  emitMessageToParticipants,
+  emitChatMessageMutation,
+  emitMessageSeen,
+  emitChatCreated,
+};

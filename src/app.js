@@ -7,7 +7,6 @@ import { Server } from "socket.io";
 import setupSocket from "./socket/socketHandler.js";
 import { registerIO } from "./socket/socketEmitter.js";
 
-
 // import routes
 import userRoutes from "./routes/user.route.js";
 import postRoutes from "./routes/post.route.js";
@@ -18,6 +17,8 @@ import likeRoutes from "./routes/like.route.js";
 import blockRoutes from "./routes/block.route.js";
 import notificationRoutes from "./routes/notification.route.js";
 import reportRoutes from "./routes/report.route.js";
+import messageRoutes from "./routes/message.route.js";
+import chatRoutes from "./routes/chat.route.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -79,6 +80,8 @@ app.use("/api/v1/likes", likeRoutes);
 app.use("/api/v1/blocks", blockRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/reports", reportRoutes);
+app.use("/api/v1/messages", messageRoutes);
+app.use("/api/v1/chats", chatRoutes);
 
 // 404 Handler
 app.use((req, res) => {

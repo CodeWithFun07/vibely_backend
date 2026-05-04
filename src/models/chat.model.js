@@ -30,6 +30,14 @@ const chatSchema = new Schema(
       type: String,
       default: null,
     },
+    groupCoverImage: {
+      type: String,
+      default: null,
+    },
+    groupCoverImage_public_id: {
+      type: String,
+      default: null,
+    },
 
     groupDescription: {
       type: String,
@@ -80,7 +88,13 @@ const chatSchema = new Schema(
       default: false,
     },
 
-    // Archive support
+    // Archive support (per user)
+    archived_by: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     is_archived: {
       type: Boolean,
       default: false,
@@ -91,6 +105,30 @@ const chatSchema = new Schema(
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
+      },
+    ],
+    groupPrivacy: {
+      type: String,
+      enum: ["public", "private_link", "approval_required"],
+      default: "public",
+    },
+
+    groupInviteLink: {
+      type: String,
+      default: null,
+    },
+
+    joinRequests: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        status: {
+          type: String,
+          enum: ["pending", "approved", "rejected"],
+          default: "pending",
+        },
       },
     ],
   },

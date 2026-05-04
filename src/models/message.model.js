@@ -78,29 +78,57 @@ const messageSchema = new Schema(
       default: null,
     },
 
-    // Soft delete
-    isDeleted: {
+    deleted_for: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        deleted_at: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+
+    deleted_for_everyone: {
       type: Boolean,
       default: false,
     },
-    deleted_by: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-    deleted_at: {
+
+    deleted_for_everyone_at: {
       type: Date,
       default: null,
     },
 
-    // Read status - use separate collection for scalability
-    is_read: {
+    is_pinned: {
       type: Boolean,
       default: false,
     },
-    read_at: {
+
+    pinned_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    pinned_at: {
       type: Date,
       default: null,
     },
+
+    seenBy: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        seen_at: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   { timestamps: true },
 );
@@ -111,4 +139,5 @@ messageSchema.index({ sender: 1 });
 messageSchema.index({ isDeleted: 1 });
 messageSchema.index({ reply_to: 1 });
 
-export default mongoose.models.Message || mongoose.model("Message", messageSchema);
+export default mongoose.models.Message ||
+  mongoose.model("Message", messageSchema);

@@ -2,6 +2,7 @@ import Follow from "../models/follow.model.js";
 import User from "../models/user.model.js";
 import Block from "../models/block.model.js";
 import ApiError from "../utils/apiError.js";
+import client from "../config/redis.config.js";
 
 class FollowService {
   /**
@@ -80,6 +81,12 @@ class FollowService {
         isFollowing = false;
       }
 
+      // Invalidate Redis cache
+      await client.del(`followers:${userId}`);
+      await client.del(`following:${userId}`);
+      await client.del(`followers:${targetUserId}`);
+      await client.del(`following:${targetUserId}`);
+
       return {
         isFollowing,
         message: isFollowing
@@ -94,19 +101,18 @@ class FollowService {
     }
   }
 
-  /**
-   * Get followers of current user
-   * @param {string} userId - Current user ID
-   * @param {number} page - Page number
-   * @param {number} limit - Items per page
-   * @returns {Object} - { followers, pagination }
-   */
   async getFollowers(userId, page = 1, limit = 10) {
     if (!userId) {
       throw new ApiError(400, "User ID is required");
     }
 
     try {
+      const cacheKey = `followers:${userId}:${page}:${limit}`;
+      const cachedData = await client.get(cacheKey);
+      if (cachedData) {
+        return JSON.parse(cachedData);
+      }
+      
       const skip = (page - 1) * limit;
 
       // Get blocked users (users that blocked current user OR users current user blocked)
@@ -156,7 +162,7 @@ class FollowService {
 
       const totalPages = Math.ceil(totalFollowers / limit);
 
-      return {
+      const result = {
         followers: validFollowers,
         pagination: {
           currentPage: page,
@@ -167,6 +173,11 @@ class FollowService {
           hasPrevPage: page > 1,
         },
       };
+
+      // Store in Redis for 5 minutes
+      await client.set(cacheKey, JSON.stringify(result), { EX: 300 });
+
+      return result;
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;
@@ -188,6 +199,12 @@ class FollowService {
     }
 
     try {
+      const cacheKey = `following:${userId}:${page}:${limit}`;
+      const cachedData = await client.get(cacheKey);
+      if (cachedData) {
+        return JSON.parse(cachedData);
+      }
+
       const skip = (page - 1) * limit;
 
       // Get blocked users (users that blocked current user OR users current user blocked)
@@ -237,7 +254,7 @@ class FollowService {
 
       const totalPages = Math.ceil(totalFollowing / limit);
 
-      return {
+      const result = {
         following: validFollowing,
         pagination: {
           currentPage: page,
@@ -248,6 +265,11 @@ class FollowService {
           hasPrevPage: page > 1,
         },
       };
+
+      // Store in Redis for 5 minutes
+      await client.set(cacheKey, JSON.stringify(result), { EX: 300 });
+
+      return result;
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;
