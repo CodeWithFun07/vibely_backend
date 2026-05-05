@@ -14,10 +14,28 @@ const setupSocket = (io) => {
 
     // When a user logs in/connects, they send their userId
     socket.on("setup", async (userId) => {
-      if (userId) {
-        socket.join(userId);
-        userSocketMap.set(userId, socket.id);
-        console.log(`👤 User ${userId} is now online`);
+      const uid = userId != null ? String(userId) : "";
+      if (uid) {
+        socket.data.userId = uid;
+        socket.join(uid);
+        userSocketMap.set(uid, socket.id);
+        console.log(`👤 User ${uid} is now online`);
+        
+        // Update user's is_online status in database
+        try {
+          const User = (await import("../models/user.model.js")).default;
+          await User.findByIdAndUpdate(
+            uid,
+            {
+              is_online: true,
+              last_seen: null, // Clear last_seen when user is online
+            },
+            { new: true }
+          );
+          console.log(`✅ Updated is_online for user ${uid}`);
+        } catch (dbError) {
+          console.error("Error updating user is_online:", dbError.message);
+        }
         
         // Get followers from database and setup followers map
         try {
@@ -25,29 +43,29 @@ const setupSocket = (io) => {
           const User = (await import("../models/user.model.js")).default;
           
           // Get user details to store
-          const user = await User.findById(userId).select("username");
-          if (user) {
-            userDetailsMap.set(userId, { username: user.username });
-          }
-          
-          const followers = await Follow.find({ following: userId }).select("followed_by");
-          const followerIds = followers.map(f => f.followed_by.toString());
-          
-          if (followerIds.length > 0) {
-            userFollowersMap.set(userId, new Set(followerIds));
-          }
-          
-          // Broadcast online status to followers
-          followerIds.forEach((followerId) => {
-            io.to(followerId).emit("user status changed", {
-              userId,
-              username: user?.username || "A user",
-              status: "online",
-              timestamp: new Date(),
+          const user = await User.findById(uid).select("username is_active");
+          if (user && user.is_active) { // Only broadcast if user is active
+            userDetailsMap.set(uid, { username: user.username });
+            
+            const followers = await Follow.find({ following: uid }).select("followed_by");
+            const followerIds = followers.map(f => f.followed_by.toString());
+            
+            if (followerIds.length > 0) {
+              userFollowersMap.set(uid, new Set(followerIds));
+            }
+            
+            // Broadcast online status to followers
+            followerIds.forEach((followerId) => {
+              io.to(followerId).emit("user status changed", {
+                userId: uid,
+                username: user?.username || "A user",
+                status: "online",
+                timestamp: new Date(),
+              });
             });
-          });
-          
-          console.log(`📢 Broadcasted online status to ${followerIds.length} followers`);
+            
+            console.log(`📢 Broadcasted online status to ${followerIds.length} followers`);
+          }
         } catch (error) {
           console.error("Error fetching followers:", error.message);
         }
@@ -58,20 +76,62 @@ const setupSocket = (io) => {
 
     // Join a specific chat room
     socket.on("join chat", (room) => {
-      socket.join(room);
-      console.log(`💬 User joined chat room: ${room}`);
+      if (room == null || room === "") return;
+      const roomId = String(room);
+      socket.join(roomId);
+      console.log(`💬 User joined chat room: ${roomId}`);
     });
 
-    // Typing indicators
-    socket.on("typing", (room) => socket.in(room).emit("typing"));
-    socket.on("stop typing", (room) => socket.in(room).emit("stop typing"));
+    // Typing indicators — forward { room, userId } so clients can filter and ignore self
+    socket.on("typing", (payload) => {
+      const room =
+        typeof payload === "string"
+          ? payload
+          : payload?.room != null
+            ? String(payload.room)
+            : "";
+      if (!room) return;
+      const fromUserId = socket.data.userId || null;
+      const username = fromUserId
+        ? userDetailsMap.get(fromUserId)?.username
+        : undefined;
+      socket.to(room).emit("typing", {
+        room,
+        userId: fromUserId,
+        username: username || "Someone",
+      });
+    });
 
-    // Real-time notifications
+    socket.on("stop typing", (payload) => {
+      const room =
+        typeof payload === "string"
+          ? payload
+          : payload?.room != null
+            ? String(payload.room)
+            : "";
+      if (!room) return;
+      const fromUserId = socket.data.userId || null;
+      const username = fromUserId
+        ? userDetailsMap.get(fromUserId)?.username
+        : undefined;
+      socket.to(room).emit("stop typing", {
+        room,
+        userId: fromUserId,
+        username: username || "Someone",
+      });
+    });
+
+    // Optional client relay — prefer server emitNotification from controllers
     socket.on("new notification", (notification) => {
-      const targetUserId = notification.recipient;
+      const raw = notification?.recipient;
+      const targetUserId =
+        raw != null && typeof raw === "object" && raw.toString
+          ? String(raw)
+          : raw != null
+            ? String(raw)
+            : "";
       if (targetUserId) {
-        // Emit to the specific user's room
-        socket.in(targetUserId).emit("notification received", notification);
+        io.to(targetUserId).emit("notification received", notification);
       }
     });
 
@@ -87,6 +147,22 @@ const setupSocket = (io) => {
           disconnectedUserId = userId;
           const userDetails = userDetailsMap.get(userId);
           console.log(`👤 User ${userId} went offline`);
+          
+          // Update user's last_seen and is_online status in database
+          try {
+            const User = (await import("../models/user.model.js")).default;
+            await User.findByIdAndUpdate(
+              userId,
+              {
+                is_online: false,
+                last_seen: new Date(),
+              },
+              { new: true }
+            );
+            console.log(`✅ Updated last_seen for user ${userId}`);
+          } catch (dbError) {
+            console.error("Error updating user last_seen:", dbError.message);
+          }
           
           // Get followers and broadcast offline status
           try {

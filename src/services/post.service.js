@@ -11,6 +11,14 @@ import {
 } from "../utils/cloudinaryUpload.js";
 import { extractMentions, getUserIdsFromUsernames } from "../utils/mentionHelper.js";
 import notificationService from "./notification.service.js";
+import {
+  cacheGetJson,
+  cacheSetJson,
+  postDetailCacheKey,
+  invalidatePostDetailCache,
+  TTL_POST_DETAIL_SECONDS,
+  invalidateUserProfileCaches,
+} from "../utils/cacheAside.js";
 
 class PostService {
   /**
@@ -191,6 +199,9 @@ class PostService {
         });
       }
 
+      const creator = await User.findById(userId).select("username").lean();
+      await invalidateUserProfileCaches(userId, creator?.username);
+
       return populatedPost;
     } catch (error) {
       // Clean up uploaded media if post creation fails
@@ -367,6 +378,8 @@ class PostService {
         });
       }
 
+      await invalidatePostDetailCache(postId);
+
       return populatedPost;
     } catch (error) {
       // Clean up newly uploaded media if update fails
@@ -426,6 +439,8 @@ class PostService {
     post.isDeleted = true;
     post.deleted_at = new Date();
     await post.save();
+
+    await invalidatePostDetailCache(postId);
 
     return { message: "post deleted successfully" };
   }
@@ -553,6 +568,12 @@ class PostService {
     }
 
     try {
+      const detailCacheKey = postDetailCacheKey(postId, userId);
+      const cachedDetail = await cacheGetJson(detailCacheKey);
+      if (cachedDetail) {
+        return cachedDetail;
+      }
+
       // First check if post exists and get basic info
       const post = await Post.findById(postId).lean();
       if (!post) {
@@ -608,7 +629,14 @@ class PostService {
       // Use _populatePostStatus to get complete post data with likes
       const postsWithStatus = await this._populatePostStatus([fullPost], userId);
 
-      return postsWithStatus[0];
+      const postDetailPayload = postsWithStatus[0];
+      await cacheSetJson(
+        detailCacheKey,
+        postDetailPayload,
+        TTL_POST_DETAIL_SECONDS,
+      );
+
+      return postDetailPayload;
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;

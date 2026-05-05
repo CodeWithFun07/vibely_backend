@@ -705,6 +705,81 @@ const accountReactivatedTemplate = ({ username, email }) => {
   `;
 };
 
+/**
+ * Token Expired Template - sent when refresh token expires after 7 days
+ */
+const tokenExpiredTemplate = ({ username, email }) => {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${BRAND.name} - Session Expired</title>
+</head>
+
+<body style="margin:0; padding:0; background:${BRAND.secondaryColor}; font-family:Arial, sans-serif;">
+  
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:20px 0;">
+    <tr>
+      <td align="center">
+
+        <table width="500" cellpadding="0" cellspacing="0" 
+          style="background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 6px 15px rgba(0,0,0,0.06);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:${BRAND.primaryColor}; padding:25px; text-align:center;">
+              <img src="${BRAND.logo}" alt="${BRAND.name}" width="100" 
+                   style="display:block; margin:0 auto 10px;" />
+              <h1 style="color:#ffffff; margin:0; font-size:20px;">
+                ${BRAND.name}
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:30px; color:${BRAND.textColor};">
+
+              <p style="font-size:16px;">Hi <strong>${username}</strong>,</p>
+
+              <p style="font-size:14px; color:#555; line-height:1.6;">
+                Your session has expired due to inactivity. Your refresh token was valid for 7 days and has now expired for security reasons.
+              </p>
+
+              <p style="font-size:14px; color:#555; line-height:1.6;">
+                No action is needed on your part. You can simply log in again to continue using ${BRAND.name}.
+              </p>
+
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${process.env.FRONTEND_URL}/login" 
+                   style="display: inline-block; padding: 12px 30px; background: ${BRAND.primaryColor}; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                  Log In Again
+                </a>
+              </div>
+
+              <p style="font-size:12px; color:#999; line-height:1.6; margin-top:20px; border-top:1px solid #e0e0e0; padding-top:20px;">
+                If you have any questions or concerns about your account security, please <a href="mailto:support@${BRAND.name.toLowerCase()}.com" style="color:${BRAND.primaryColor}; text-decoration:none;">contact support</a>.
+              </p>
+
+              <p style="font-size:11px; color:#999; margin:15px 0 0;">
+                © ${new Date().getFullYear()} ${BRAND.name}. All rights reserved.
+              </p>
+
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+  </body>
+  </html>
+  `;
+};
+
 export {
   verifySignupEmailTemplate,
   accountVerifiedTemplate,
@@ -714,4 +789,5 @@ export {
   accountDeactivatedTemplate,
   accountReactivationOtpTemplate,
   accountReactivatedTemplate,
+  tokenExpiredTemplate,
 };

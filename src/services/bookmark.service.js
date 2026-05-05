@@ -2,6 +2,7 @@ import Bookmark from "../models/bookmark.model.js";
 import Post from "../models/post.model.js";
 import Like from "../models/like.model.js";
 import ApiError from "../utils/apiError.js";
+import { invalidatePostDetailCache } from "../utils/cacheAside.js";
 
 class BookmarkService {
   /**
@@ -113,6 +114,8 @@ class BookmarkService {
         await bookmark.save();
         isBookmarked = true;
       }
+
+      await invalidatePostDetailCache(postId);
 
       return {
         isBookmarked,

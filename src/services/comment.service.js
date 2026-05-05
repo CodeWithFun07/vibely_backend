@@ -5,6 +5,7 @@ import Like from "../models/like.model.js";
 import ApiError from "../utils/apiError.js";
 import { extractMentions, getUserIdsFromUsernames } from "../utils/mentionHelper.js";
 import notificationService from "./notification.service.js";
+import { invalidatePostDetailCache } from "../utils/cacheAside.js";
 
 class CommentService {
   /**
@@ -157,6 +158,8 @@ class CommentService {
         });
       }
 
+      await invalidatePostDetailCache(postId);
+
       return populatedComment;
     } catch (error) {
       if (error instanceof ApiError) {
@@ -259,6 +262,8 @@ class CommentService {
       await Comment.deleteMany({ parent_comment: commentId });
 
       await Comment.findByIdAndDelete(commentId);
+
+      await invalidatePostDetailCache(String(comment.post_id));
 
       return { message: "Comment deleted successfully" };
     } catch (error) {

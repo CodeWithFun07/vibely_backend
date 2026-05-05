@@ -3,6 +3,7 @@ import User from "../models/user.model.js";
 import Block from "../models/block.model.js";
 import ApiError from "../utils/apiError.js";
 import client from "../config/redis.config.js";
+import { invalidateUserProfileCaches } from "../utils/cacheAside.js";
 
 class FollowService {
   /**
@@ -86,6 +87,10 @@ class FollowService {
       await client.del(`following:${userId}`);
       await client.del(`followers:${targetUserId}`);
       await client.del(`following:${targetUserId}`);
+
+      const follower = await User.findById(userId).select("username").lean();
+      await invalidateUserProfileCaches(userId, follower?.username);
+      await invalidateUserProfileCaches(targetUserId, targetUser.username);
 
       return {
         isFollowing,

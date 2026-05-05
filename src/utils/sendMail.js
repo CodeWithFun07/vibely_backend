@@ -8,9 +8,20 @@ const sendMail = async ({ to, subject, html }) => {
       subject,
       html,
     });
+    if (
+      !res ||
+      !Array.isArray(res.accepted) ||
+      res.accepted.length === 0
+    ) {
+      const msg =
+        res?.response ||
+        "SMTP did not accept the message (no accepted recipients).";
+      throw new Error(msg);
+    }
     return res;
   } catch (error) {
-    console.error("Error sending email:", error);
+    console.error("Error sending email:", error?.message || error);
+    throw error;
   }
 };
 

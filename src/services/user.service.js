@@ -1,5 +1,13 @@
 import client from "../config/redis.config.js";
 import {
+  cacheGetJson,
+  cacheSetJson,
+  myProfileCacheKey,
+  userProfileCacheKey,
+  invalidateUserProfileCaches,
+  TTL_PROFILE_SECONDS,
+} from "../utils/cacheAside.js";
+import {
   accountVerifiedTemplate,
   resendOtpEmailTemplate,
   verifySignupEmailTemplate,
@@ -76,14 +84,19 @@ class UserService {
 
     await user.save();
 
-    const mailResult = await sendMail({
-      to: email,
-      subject: "verify your email",
-      html: verifySignupEmailTemplate(username, otp, email),
-    });
-
-    if (!mailResult.accepted) {
-      throw new ApiError(500, "Failed to send verification email");
+    try {
+      await sendMail({
+        to: email,
+        subject: "verify your email",
+        html: verifySignupEmailTemplate(username, otp, email),
+      });
+    } catch {
+      await User.deleteOne({ _id: user._id });
+      await client.del(`otp:${email}`);
+      throw new ApiError(
+        500,
+        "We could not send the verification email. Please try again later.",
+      );
     }
 
     return {
@@ -131,17 +144,24 @@ class UserService {
     user.is_verified = true;
     user.is_active = true;
     user.refresh_token = refreshToken;
+    user.refresh_token_created_at = new Date();
     await user.save();
 
-    await sendMail({
-      to: email,
-      subject: "Email verified successfully",
-      html: accountVerifiedTemplate({
-        username: user.username,
-        fullName: user.profile.full_name,
-        email: user.email,
-      }),
-    });
+    await invalidateUserProfileCaches(user._id.toString(), user.username);
+
+    try {
+      await sendMail({
+        to: email,
+        subject: "Email verified successfully",
+        html: accountVerifiedTemplate({
+          username: user.username,
+          fullName: user.profile.full_name,
+          email: user.email,
+        }),
+      });
+    } catch (e) {
+      console.error("Verify signup welcome email failed:", e?.message || e);
+    }
 
     return {
       message: "Email verified successfully",
@@ -180,11 +200,20 @@ class UserService {
       throw new ApiError(400, "Invalid credentials");
     }
 
+    if (!user.is_verified) {
+      throw new ApiError(
+        403,
+        "Your account is not verified. Please verify your account to login.",
+      );
+    }
+
     const accessToken = await generateAccessToken(user._id);
     const refreshToken = await generateRefreshToken(user._id);
 
     user.refresh_token = refreshToken;
+    user.refresh_token_created_at = new Date();
     user.is_online = true;
+    user.last_seen = null;
 
     await user.save();
 
@@ -224,15 +253,23 @@ class UserService {
       EX: 120,
     });
 
-    const sendMailResult = await sendMail({
-      to: email,
-      subject: "Resend Otp Code",
-      html: resendOtpEmailTemplate({
-        username: user.username,
-        email: user.email,
-        otp,
-      }),
-    });
+    try {
+      await sendMail({
+        to: email,
+        subject: "Resend Otp Code",
+        html: resendOtpEmailTemplate({
+          username: user.username,
+          email: user.email,
+          otp,
+        }),
+      });
+    } catch {
+      await client.del(`otp:${email}`);
+      throw new ApiError(
+        500,
+        "We could not send the OTP email. Please try again later.",
+      );
+    }
 
     return {
       message: "Otp Send To Your Email",
@@ -264,18 +301,22 @@ class UserService {
       EX: 120,
     }); // otp expires in 2 minutes
 
-    const sendMailResult = await sendMail({
-      to: user.email,
-      subject: "Reset Your Password",
-      html: resetPasswordOtpTemplate({
-        username: user.username,
-        email: user.email,
-        otp,
-      }),
-    });
-
-    if (!sendMailResult.accepted) {
-      throw new ApiError(500, "Failed to send password reset email");
+    try {
+      await sendMail({
+        to: user.email,
+        subject: "Reset Your Password",
+        html: resetPasswordOtpTemplate({
+          username: user.username,
+          email: user.email,
+          otp,
+        }),
+      });
+    } catch {
+      await client.del(`forgot-password:${user.email}`);
+      throw new ApiError(
+        500,
+        "We could not send the password reset email. Please try again later.",
+      );
     }
 
     return {
@@ -346,16 +387,25 @@ class UserService {
     user.password = hashedPassword;
     await user.save();
 
+    await invalidateUserProfileCaches(user._id.toString(), user.username);
+
     await client.del(`reset-token:${email}`);
 
-    await sendMail({
-      to: email,
-      subject: "Password Reset Successful",
-      html: passwordResetConfirmationTemplate({
-        username: user.username,
-        email: user.email,
-      }),
-    });
+    try {
+      await sendMail({
+        to: email,
+        subject: "Password Reset Successful",
+        html: passwordResetConfirmationTemplate({
+          username: user.username,
+          email: user.email,
+        }),
+      });
+    } catch (e) {
+      console.error(
+        "Password reset confirmation email failed:",
+        e?.message || e,
+      );
+    }
 
     return {
       message: "Password has been reset successfully",
@@ -406,6 +456,8 @@ class UserService {
     const hashedPassword = await bcrypt.hash(new_password, 10);
     user.password = hashedPassword;
     await user.save();
+
+    await invalidateUserProfileCaches(user._id.toString(), user.username);
 
     return {
       message: "Password updated successfully",
@@ -510,6 +562,8 @@ class UserService {
 
     await user.save();
 
+    await invalidateUserProfileCaches(user._id.toString(), user.username);
+
     return {
       message: "Profile updated successfully",
       user: {
@@ -541,16 +595,23 @@ class UserService {
     }
 
     user.is_active = false;
+    user.is_verified = false;
     await user.save();
 
-    await sendMail({
-      to: user.email,
-      subject: "Account Deactivated",
-      html: accountDeactivatedTemplate({
-        username: user.username,
-        email: user.email,
-      }),
-    });
+    await invalidateUserProfileCaches(user._id.toString(), user.username);
+
+    try {
+      await sendMail({
+        to: user.email,
+        subject: "Account Deactivated",
+        html: accountDeactivatedTemplate({
+          username: user.username,
+          email: user.email,
+        }),
+      });
+    } catch (e) {
+      console.error("Account deactivated email failed:", e?.message || e);
+    }
 
     return {
       message: "Account has been deactivated",
@@ -577,15 +638,23 @@ class UserService {
       EX: 120,
     }); // otp expires in 2 minutes
 
-    await sendMail({
-      to: user.email,
-      subject: "Reactivate Your Account",
-      html: accountReactivationOtpTemplate({
-        username: user.username,
-        email: user.email,
-        otp,
-      }),
-    });
+    try {
+      await sendMail({
+        to: user.email,
+        subject: "Reactivate Your Account",
+        html: accountReactivationOtpTemplate({
+          username: user.username,
+          email: user.email,
+          otp,
+        }),
+      });
+    } catch {
+      await client.del(`reactivate:${user.email}`);
+      throw new ApiError(
+        500,
+        "We could not send the reactivation email. Please try again later.",
+      );
+    }
 
     return {
       message: "Reactivation OTP sent to your email",
@@ -618,16 +687,22 @@ class UserService {
     user.is_active = true;
     await user.save();
 
+    await invalidateUserProfileCaches(user._id.toString(), user.username);
+
     await client.del(`reactivate:${user.email}`);
 
-    await sendMail({
-      to: user.email,
-      subject: "Account Reactivated Successfully",
-      html: accountReactivatedTemplate({
-        username: user.username,
-        email: user.email,
-      }),
-    });
+    try {
+      await sendMail({
+        to: user.email,
+        subject: "Account Reactivated Successfully",
+        html: accountReactivatedTemplate({
+          username: user.username,
+          email: user.email,
+        }),
+      });
+    } catch (e) {
+      console.error("Account reactivated email failed:", e?.message || e);
+    }
 
     return {
       message: "Account has been reactivated successfully",
@@ -688,6 +763,8 @@ class UserService {
     }
 
     await user.save();
+
+    await invalidateUserProfileCaches(user._id.toString(), user.username);
 
     return {
       message: "Privacy settings updated successfully",
@@ -759,9 +836,13 @@ class UserService {
       throw new ApiError(404, "User not found");
     }
 
+    // Only update online status and last seen, NOT is_active
     user.refresh_token = "";
     user.is_online = false;
+    user.last_seen = new Date();
     await user.save();
+
+    await invalidateUserProfileCaches(user._id.toString(), user.username);
 
     return {
       message: "Logout successful",
@@ -774,6 +855,12 @@ class UserService {
   async getMyProfile(userId) {
     if (!userId) {
       throw new ApiError(400, "User ID is required");
+    }
+
+    const profileCacheKey = myProfileCacheKey(userId);
+    const cachedProfile = await cacheGetJson(profileCacheKey);
+    if (cachedProfile) {
+      return cachedProfile;
     }
 
     const user = await User.findById(userId).select("-password -refresh_token");
@@ -823,7 +910,7 @@ class UserService {
       .map((rel) => rel.blocked_user?.username)
       .filter(Boolean);
 
-    return {
+    const profilePayload = {
       message: "Profile retrieved successfully",
       user: {
         ...user.toObject(),
@@ -837,6 +924,10 @@ class UserService {
         recentPosts,
       },
     };
+
+    await cacheSetJson(profileCacheKey, profilePayload, TTL_PROFILE_SECONDS);
+
+    return profilePayload;
   }
 
   /** get user profile
@@ -845,6 +936,15 @@ class UserService {
   async getUserProfile(identifier, currentUserId = null) {
     if (!identifier) {
       throw new ApiError(400, "User ID or username is required");
+    }
+
+    const publicProfileCacheKey = userProfileCacheKey(
+      identifier,
+      currentUserId,
+    );
+    const cachedPublicProfile = await cacheGetJson(publicProfileCacheKey);
+    if (cachedPublicProfile) {
+      return cachedPublicProfile;
     }
 
     let user;
@@ -883,7 +983,8 @@ class UserService {
     }
 
     // Get user posts count
-    const isOwnProfile = currentUserId && currentUserId.toString() === user._id.toString();
+    const isOwnProfile =
+      currentUserId && currentUserId.toString() === user._id.toString();
     const postsCount = await Post.countDocuments({
       created_by: user._id,
       isDeleted: false,
@@ -920,7 +1021,7 @@ class UserService {
       isFollowing = !!follow;
     }
 
-    return {
+    const publicProfilePayload = {
       message: "User profile retrieved successfully",
       user: {
         ...user.toObject(),
@@ -933,6 +1034,14 @@ class UserService {
         isFollowing,
       },
     };
+
+    await cacheSetJson(
+      publicProfileCacheKey,
+      publicProfilePayload,
+      TTL_PROFILE_SECONDS,
+    );
+
+    return publicProfilePayload;
   }
 
   /** search users (Instagram-like)

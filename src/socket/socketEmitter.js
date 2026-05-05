@@ -13,6 +13,46 @@
 
 let io = null;
 
+/** Plain object for Socket.IO JSON (avoids circular refs / odd Mongoose serialization). */
+const toSocketPayload = (doc) => {
+  if (doc == null) return doc;
+  if (typeof doc.toObject === "function") {
+    return doc.toObject({ flattenMaps: true });
+  }
+  return doc;
+};
+
+const idToString = (id) => {
+  if (id == null) return id;
+  if (typeof id === "string") return id;
+  if (typeof id === "object" && typeof id.$oid === "string") return id.$oid;
+  if (typeof id === "object" && typeof id.toHexString === "function")
+    return id.toHexString();
+  return String(id);
+};
+
+/** So clients always get string ids (fixes realtime + React Query keys). */
+const normalizeMessageForSocket = (message) => {
+  const p = toSocketPayload(message);
+  if (!p || typeof p !== "object") return p;
+  const m = { ...p };
+  if (m.chat_id != null) m.chat_id = idToString(m.chat_id);
+  if (m.sender && typeof m.sender === "object" && m.sender._id != null) {
+    m.sender = { ...m.sender, _id: idToString(m.sender._id) };
+  } else if (m.sender != null && typeof m.sender !== "object") {
+    m.sender = idToString(m.sender);
+  }
+  if (m.reply_to && typeof m.reply_to === "object") {
+    const r = { ...m.reply_to };
+    if (r._id != null) r._id = idToString(r._id);
+    if (r.sender && typeof r.sender === "object" && r.sender._id != null) {
+      r.sender = { ...r.sender, _id: idToString(r.sender._id) };
+    }
+    m.reply_to = r;
+  }
+  return m;
+};
+
 /**
  * Register the Socket.IO instance
  * Call this once from the main app.js when socket is initialized
@@ -34,9 +74,10 @@ export const emitNotification = (recipientId, notification) => {
   }
 
   try {
-    // Emit to the recipient's room (which is their userId)
-    io.to(recipientId).emit("notification received", notification);
-    console.log(`📤 Notification emitted to user ${recipientId} ${notification}`);
+    const rid = String(recipientId);
+    const payload = toSocketPayload(notification);
+    io.to(rid).emit("notification received", payload);
+    console.log(`📤 Notification emitted to user ${rid}`);
   } catch (error) {
     console.error("Error emitting notification:", error);
   }
@@ -88,8 +129,9 @@ export const emitNotificationToMultiple = (recipientIds, notification) => {
   }
 
   try {
+    const payload = toSocketPayload(notification);
     recipientIds.forEach((recipientId) => {
-      io.to(recipientId).emit("notification received", notification);
+      io.to(String(recipientId)).emit("notification received", payload);
     });
     console.log(
       `📤 Notification emitted to ${recipientIds.length} users`
@@ -106,7 +148,8 @@ export const emitMessageToChat = (chatId, message) => {
   }
 
   try {
-    io.to(chatId.toString()).emit("message received", message);
+    const payload = normalizeMessageForSocket(message);
+    io.to(String(chatId)).emit("message received", payload);
     console.log(`📩 Message emitted to chat room ${chatId}`);
   } catch (error) {
     console.error("Error emitting chat message:", error);
@@ -120,8 +163,9 @@ export const emitMessageToParticipants = (participantIds, message) => {
   }
 
   try {
+    const payload = normalizeMessageForSocket(message);
     participantIds.forEach((id) => {
-      io.to(id.toString()).emit("message received", message);
+      io.to(String(id)).emit("message received", payload);
     });
     console.log(`📩 Message emitted to ${participantIds.length} participants`);
   } catch (error) {

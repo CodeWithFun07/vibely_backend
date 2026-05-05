@@ -1,5 +1,5 @@
 import { Router } from "express";
-import isAuthenticated from "../middlewares/auth.middleware.js";
+import isAuthenticated, { isAccountActive } from "../middlewares/auth.middleware.js";
 import { uploadMultipleFiles } from "../middlewares/multer.js";
 import {
   sendMessage,
@@ -26,53 +26,53 @@ const router = Router();
  * Send + Fetch Messages
  */
 
-router.route("/send-message").post(isAuthenticated, uploadMultipleFiles("media", 10), sendMessage);
+router.route("/send-message").post(isAuthenticated, isAccountActive, uploadMultipleFiles("media", 10), sendMessage);
 
-router.route("/:chatId").get(isAuthenticated, getMessages);
+router.route("/:chatId").get(isAuthenticated, isAccountActive, getMessages);
 
-router.route("/search-messages/:chatId").get(isAuthenticated, searchMessages);
+router.route("/search-messages/:chatId").get(isAuthenticated, isAccountActive, searchMessages);
 
 /**
  * Message Actions
  */
 
-router.route("/edit-message/:messageId").put(isAuthenticated, editMessage);
+router.route("/edit-message/:messageId").put(isAuthenticated, isAccountActive, editMessage);
 
-router.route("/reply-message/:messageId").post(isAuthenticated, uploadMultipleFiles("media", 10), replyMessage);
+router.route("/reply-message/:messageId").post(isAuthenticated, isAccountActive, uploadMultipleFiles("media", 10), replyMessage);
 
 router
   .route("/forward-message/:messageId")
-  .post(isAuthenticated, forwardMessage);
+  .post(isAuthenticated, isAccountActive, forwardMessage);
 
-router.route("/mark-seen/:chatId").put(isAuthenticated, markAsSeen);
+router.route("/mark-seen/:chatId").put(isAuthenticated, isAccountActive, markAsSeen);
 
 /**
  * Delete System
  */
 
-router.route("/delete-for-me/:messageId").put(isAuthenticated, deleteForMe);
+router.route("/delete-for-me/:messageId").put(isAuthenticated, isAccountActive, deleteForMe);
 
 router
   .route("/delete-for-everyone/:messageId")
-  .put(isAuthenticated, deleteForEveryone);
+  .put(isAuthenticated, isAccountActive, deleteForEveryone);
 
 /**
  * Reactions
  */
 
-router.route("/react-message/:messageId").post(isAuthenticated, reactToMessage);
+router.route("/react-message/:messageId").post(isAuthenticated, isAccountActive, reactToMessage);
 
 router
   .route("/remove-reaction/:messageId")
-  .delete(isAuthenticated, removeReaction);
+  .delete(isAuthenticated, isAccountActive, removeReaction);
 
 /**
  * Pin / Unpin
  */
 
-router.route("/pin-message/:messageId").put(isAuthenticated, pinMessage);
+router.route("/pin-message/:messageId").put(isAuthenticated, isAccountActive, pinMessage);
 
-router.route("/unpin-message/:messageId").put(isAuthenticated, unpinMessage);
+router.route("/unpin-message/:messageId").put(isAuthenticated, isAccountActive, unpinMessage);
 
 /**
  * Admin Controls
@@ -80,10 +80,10 @@ router.route("/unpin-message/:messageId").put(isAuthenticated, unpinMessage);
 
 router
   .route("/admin-delete-message/:messageId")
-  .delete(isAuthenticated, adminDeleteMessage);
+  .delete(isAuthenticated, isAccountActive, adminDeleteMessage);
 
 router
   .route("/admin-pin-message/:messageId")
-  .put(isAuthenticated, adminPinMessage);
+  .put(isAuthenticated, isAccountActive, adminPinMessage);
 
 export default router;

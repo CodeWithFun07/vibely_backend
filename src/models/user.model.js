@@ -145,6 +145,11 @@ const userSchema = new Schema(
       type: String,
     },
 
+    refresh_token_created_at: {
+      type: Date,
+      default: null,
+    },
+
     profile: {
       profile_picture: {
         type: String,

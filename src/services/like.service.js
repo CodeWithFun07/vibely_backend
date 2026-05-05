@@ -2,6 +2,7 @@ import Like from "../models/like.model.js";
 import Post from "../models/post.model.js";
 import Comment from "../models/comment.model.js";
 import ApiError from "../utils/apiError.js";
+import { invalidatePostDetailCache } from "../utils/cacheAside.js";
 
 class LikeService {
   /**
@@ -90,6 +91,10 @@ class LikeService {
           await like.save();
           isLiked = true;
         }
+      }
+
+      if (targetType === "Post") {
+        await invalidatePostDetailCache(targetId);
       }
 
       return {

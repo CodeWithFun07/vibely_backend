@@ -5,7 +5,6 @@ import ApiError from "../utils/apiError.js";
 import { uploadMultipleToCloudinary } from "../utils/cloudinaryUpload.js";
 import { extractMentions, getUserIdsFromUsernames } from "../utils/mentionHelper.js";
 import {
-  emitMessageToChat,
   emitMessageToParticipants,
   emitMessageSeen,
   emitChatMessageMutation,
@@ -58,7 +57,8 @@ class MessageService {
     await chatModel.findByIdAndUpdate(chatId, { lastMessage: message._id });
 
     // Populate for real-time emission
-    const populatedMessage = await messageModel.findById(message._id)
+    const populatedMessage = await messageModel
+      .findById(message._id)
       .populate("sender", "_id username profile.profile_picture profile.full_name")
       .populate({
         path: "reply_to",
@@ -66,12 +66,12 @@ class MessageService {
           path: "sender",
           select: "_id username profile.profile_picture profile.full_name",
         },
-      });
+      })
+      .lean();
 
     const chat = await chatService.findChatForUser(senderId, chatId);
     const participantIds = chat.participants.map(p => p.toString());
 
-    emitMessageToChat(chatId, populatedMessage);
     emitMessageToParticipants(participantIds, populatedMessage);
     return populatedMessage;
   }
@@ -252,9 +252,13 @@ class MessageService {
         
         const chat = await chatModel.findById(targetChatId);
         const participantIds = chat.participants.map(p => p.toString());
+
+        const forwardedLean = await messageModel
+          .findById(forwardedMessage._id)
+          .populate("sender", "_id username profile.profile_picture profile.full_name")
+          .lean();
         
-        emitMessageToChat(targetChatId, forwardedMessage);
-        emitMessageToParticipants(participantIds, forwardedMessage);
+        emitMessageToParticipants(participantIds, forwardedLean);
         return forwardedMessage;
       })
     );
@@ -577,13 +581,14 @@ class MessageService {
 
       await chatModel.findByIdAndUpdate(chatId, { lastMessage: message._id });
 
-      const populated = await messageModel.findById(message._id)
-        .populate("sender", "_id username profile.profile_picture profile.full_name");
+      const populated = await messageModel
+        .findById(message._id)
+        .populate("sender", "_id username profile.profile_picture profile.full_name")
+        .lean();
 
       const chat = await chatService.findChatForUser(userId, chatId);
       const participantIds = chat.participants.map(p => p.toString());
 
-      emitMessageToChat(chatId, populated);
       emitMessageToParticipants(participantIds, populated);
       
       results.push(populated);

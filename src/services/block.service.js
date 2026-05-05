@@ -1,6 +1,7 @@
 import Block from "../models/block.model.js";
 import User from "../models/user.model.js";
 import ApiError from "../utils/apiError.js";
+import { invalidateUserProfileCaches } from "../utils/cacheAside.js";
 
 class BlockService {
   /**
@@ -55,6 +56,10 @@ class BlockService {
         await block.save();
         isBlocked = true;
       }
+
+      const blocker = await User.findById(userId).select("username").lean();
+      await invalidateUserProfileCaches(userId, blocker?.username);
+      await invalidateUserProfileCaches(blockUserId, user.username);
 
       return {
         isBlocked,
