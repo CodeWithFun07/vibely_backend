@@ -67,6 +67,7 @@ class NotificationService {
 
       // If preference is disabled, silently skip notification creation
       if (!isEnabled) {
+        console.warn(`⚠️ Notification type "${type}" disabled for user ${recipientId}`);
         return null;
       }
 

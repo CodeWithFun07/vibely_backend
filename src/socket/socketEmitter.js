@@ -76,8 +76,13 @@ export const emitNotification = (recipientId, notification) => {
   try {
     const rid = String(recipientId);
     const payload = toSocketPayload(notification);
+    console.log(`✉️ Emitting notification to user room: ${rid}`, {
+      notificationType: notification?.type,
+      notificationId: notification?._id,
+      sender: notification?.sender?.username || notification?.sender
+    });
     io.to(rid).emit("notification received", payload);
-    console.log(`📤 Notification emitted to user ${rid}`);
+    console.log(`📤 Notification emitted successfully to user ${rid}`);
   } catch (error) {
     console.error("Error emitting notification:", error);
   }

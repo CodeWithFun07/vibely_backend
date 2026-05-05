@@ -28,44 +28,64 @@ const toggleLike = asyncHandler(async (req, res) => {
   // Create notification if liked (not unliked)
   if (result.isLiked && targetType === "Post") {
     try {
-      const post = await postService.getPostById(targetId, userId);
-      const postOwnerId = post?.created_by?._id;
+      // Fetch post directly from DB to get owner
+      const Post = (await import("../models/post.model.js")).default;
+      const post = await Post.findById(targetId).select("created_by").lean();
+      
+      if (!post) {
+        console.warn('⚠️ Post not found for notification');
+        return res.status(200).json(new ApiResponse(true, result.message, 200, responseData));
+      }
+      
+      const postOwnerId = post?.created_by;
+      
       // Only notify if the liker is not the post owner
       if (postOwnerId && postOwnerId.toString() !== userId) {
         const notification = await notificationService.createNotification(
-          postOwnerId,
+          postOwnerId.toString(),
           userId,
           "like",
           { post: targetId }
         );
         // Emit real-time notification
         if (notification) {
+          console.log('🔔 Emitting like notification to user:', postOwnerId.toString());
           emitNotification(postOwnerId.toString(), notification);
+        } else {
+          console.warn('⚠️ Notification not created - user might have disabled notifications');
         }
       }
     } catch (error) {
-      console.log("Notification error (non-critical):", error.message);
+      console.error("Notification error (non-critical):", error.message);
     }
   } else if (result.isLiked && targetType === "Comment") {
     try {
       const Comment = (await import("../models/comment.model.js")).default;
-      const comment = await Comment.findById(targetId).populate("created_by");
-      const commentOwnerId = comment?.created_by?._id;
+      const comment = await Comment.findById(targetId).select("created_by").lean();
+      
+      if (!comment) {
+        console.warn('⚠️ Comment not found for notification');
+        return res.status(200).json(new ApiResponse(true, result.message, 200, responseData));
+      }
+      
+      const commentOwnerId = comment?.created_by;
+      
       // Only notify if the liker is not the comment owner
       if (commentOwnerId && commentOwnerId.toString() !== userId) {
         const notification = await notificationService.createNotification(
-          commentOwnerId,
+          commentOwnerId.toString(),
           userId,
           "like",
           { comment: targetId }
         );
         // Emit real-time notification
         if (notification) {
+          console.log('🔔 Emitting like notification to comment owner:', commentOwnerId.toString());
           emitNotification(commentOwnerId.toString(), notification);
         }
       }
     } catch (error) {
-      console.log("Notification error (non-critical):", error.message);
+      console.error("Notification error (non-critical):", error.message);
     }
   }
 

@@ -69,7 +69,11 @@ class MessageService {
       })
       .lean();
 
-    emitMessageToChat(chatId, populatedMessage);
+    // Fire socket emission without blocking response
+    setImmediate(() => {
+      emitMessageToChat(chatId, populatedMessage);
+    });
+    
     return populatedMessage;
   }
 
@@ -269,7 +273,11 @@ class MessageService {
           .populate("sender", "_id username profile.profile_picture profile.full_name")
           .lean();
 
-        emitMessageToChat(targetChatId, populated);
+        // Fire socket emission without blocking response
+        setImmediate(() => {
+          emitMessageToChat(targetChatId, populated);
+        });
+        
         results.push(populated);
       } catch (error) {
         console.error(`Error forwarding to chat ${targetChatId}:`, error);

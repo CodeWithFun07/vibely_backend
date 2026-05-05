@@ -23,7 +23,7 @@ import chatRoutes from "./routes/chat.route.js";
 const app = express();
 const server = http.createServer(app);
 
-const whitelist = ["http://localhost:5173", process.env.CLIENT_URL].filter(
+const whitelist = ["http://localhost:5173", "http://localhost:5174", process.env.CLIENT_URL].filter(
   Boolean,
 );
 
