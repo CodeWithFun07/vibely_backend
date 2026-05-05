@@ -12,6 +12,7 @@ const transporter = createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASSWORD,
   },
+  family: 4,
 });
 
 export default transporter;
