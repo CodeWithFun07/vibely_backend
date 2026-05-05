@@ -29,6 +29,7 @@ class PostService {
 
     return await Promise.all(
       posts.map(async (post) => {
+        if (!post) return null;
         const postObj = post.toObject ? post.toObject() : post;
 
         // Get all likes for this post with user details
@@ -46,7 +47,7 @@ class PostService {
         let reaction_type = null;
 
         if (userId) {
-          userLike = likes.find(like => like.liked_by._id.toString() === userId.toString());
+          userLike = likes.find(like => like.liked_by && like.liked_by._id.toString() === userId.toString());
           isLiked = !!userLike;
           reaction_type = userLike?.reaction_type || null;
         }
@@ -60,30 +61,32 @@ class PostService {
 
         // Group likes by reaction type for display
         const likesByReaction = {};
-        const likesArray = likes.map(like => {
-          const userObj = like.liked_by.toObject ? like.liked_by.toObject() : like.liked_by;
-          const likeObj = {
-            _id: userObj._id,
-            username: userObj.username,
-            profile_picture: userObj.profile?.profile_picture || null,
-            full_name: userObj.profile?.full_name || null,
-            reaction_type: like.reaction_type,
-            createdAt: like.createdAt,
-          };
+        const likesArray = likes
+          .filter(like => like.liked_by) // Filter out likes from deleted users
+          .map(like => {
+            const userObj = like.liked_by.toObject ? like.liked_by.toObject() : like.liked_by;
+            const likeObj = {
+              _id: userObj._id,
+              username: userObj.username,
+              profile_picture: userObj.profile?.profile_picture || null,
+              full_name: userObj.profile?.full_name || null,
+              reaction_type: like.reaction_type,
+              createdAt: like.createdAt,
+            };
 
-          // Add to likesByReaction
-          if (!likesByReaction[like.reaction_type]) {
-            likesByReaction[like.reaction_type] = [];
-          }
-          likesByReaction[like.reaction_type].push({
-            _id: userObj._id,
-            username: userObj.username,
-            profile_picture: userObj.profile?.profile_picture || null,
-            full_name: userObj.profile?.full_name || null,
+            // Add to likesByReaction
+            if (!likesByReaction[like.reaction_type]) {
+              likesByReaction[like.reaction_type] = [];
+            }
+            likesByReaction[like.reaction_type].push({
+              _id: userObj._id,
+              username: userObj.username,
+              profile_picture: userObj.profile?.profile_picture || null,
+              full_name: userObj.profile?.full_name || null,
+            });
+
+            return likeObj;
           });
-
-          return likeObj;
-        });
 
         return {
           ...postObj,
@@ -95,7 +98,7 @@ class PostService {
           likes_count: likesArray.length,
         };
       }),
-    );
+    ).then(results => results.filter(p => p !== null));
   }
 
   /**
@@ -453,9 +456,10 @@ class PostService {
    * @param {string} userId - Current user ID
    * @param {number} page - Page number (default: 1)
    * @param {number} limit - Posts per page (default: 10)
+   * @param {string} search - Search query (optional)
    * @returns {Object} - { posts, pagination }
    */
-  async getAllPost(userId, page = 1, limit = 10) {
+  async getAllPost(userId, page = 1, limit = 10, search = "") {
     if (!userId) {
       throw new ApiError(400, "User ID is required");
     }
@@ -505,6 +509,19 @@ class PostService {
           },
         ],
       };
+
+      // Add search filter if provided
+      if (search && search.trim()) {
+        const searchRegex = new RegExp(search.trim(), "i");
+        query.$and = query.$and || [];
+        query.$and.push({
+          $or: [
+            { caption: { $regex: searchRegex } },
+            { "location.name": { $regex: searchRegex } },
+            { "location.address": { $regex: searchRegex } }
+          ]
+        });
+      }
 
       // Find posts
       const posts = await Post.find(query)

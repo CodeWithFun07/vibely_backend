@@ -145,7 +145,8 @@ const getAllPost = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Limit must be between 1 and 50");
   }
 
-  const result = await postService.getAllPost(userId, page, limit);
+  const search = req.query.search || "";
+  const result = await postService.getAllPost(userId, page, limit, search);
 
   return res.status(200).json(
     new ApiResponse(true, "Posts fetched successfully", 200, {

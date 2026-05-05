@@ -33,37 +33,39 @@ class CommentService {
         let reaction_type = null;
         
         if (userId) {
-          userLike = likes.find(like => like.liked_by._id.toString() === userId.toString());
+          userLike = likes.find(like => like.liked_by && like.liked_by._id.toString() === userId.toString());
           isLiked = !!userLike;
           reaction_type = userLike?.reaction_type || null;
         }
 
         // Group likes by reaction type for display
         const likesByReaction = {};
-        const likesArray = likes.map(like => {
-          const userObj = like.liked_by.toObject ? like.liked_by.toObject() : like.liked_by;
-          const likeObj = {
-            _id: userObj._id,
-            username: userObj.username,
-            profile_picture: userObj.profile?.profile_picture || null,
-            full_name: userObj.profile?.full_name || null,
-            reaction_type: like.reaction_type,
-            createdAt: like.createdAt,
-          };
-          
-          // Add to likesByReaction
-          if (!likesByReaction[like.reaction_type]) {
-            likesByReaction[like.reaction_type] = [];
-          }
-          likesByReaction[like.reaction_type].push({
-            _id: userObj._id,
-            username: userObj.username,
-            profile_picture: userObj.profile?.profile_picture || null,
-            full_name: userObj.profile?.full_name || null,
+        const likesArray = likes
+          .filter(like => like.liked_by) // Filter out likes from deleted users
+          .map(like => {
+            const userObj = like.liked_by.toObject ? like.liked_by.toObject() : like.liked_by;
+            const likeObj = {
+              _id: userObj._id,
+              username: userObj.username,
+              profile_picture: userObj.profile?.profile_picture || null,
+              full_name: userObj.profile?.full_name || null,
+              reaction_type: like.reaction_type,
+              createdAt: like.createdAt,
+            };
+            
+            // Add to likesByReaction
+            if (!likesByReaction[like.reaction_type]) {
+              likesByReaction[like.reaction_type] = [];
+            }
+            likesByReaction[like.reaction_type].push({
+              _id: userObj._id,
+              username: userObj.username,
+              profile_picture: userObj.profile?.profile_picture || null,
+              full_name: userObj.profile?.full_name || null,
+            });
+            
+            return likeObj;
           });
-          
-          return likeObj;
-        });
 
         const result = {
           ...commentObj,

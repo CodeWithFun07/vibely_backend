@@ -182,7 +182,16 @@ export const emitChatMessageMutation = (chatId, payload) => {
     return;
   }
   try {
-    io.to(chatId.toString()).emit("message mutated", payload);
+    const cid = String(chatId || "");
+    if (!cid) return;
+
+    // Normalize message if present in payload
+    if (payload.message) {
+      payload.message = normalizeMessageForSocket(payload.message);
+    }
+
+    io.to(cid).emit("message mutated", payload);
+    console.log(`🔄 Message mutation (${payload.type}) emitted to chat room ${cid}`);
   } catch (error) {
     console.error("Error emitting message mutated:", error);
   }

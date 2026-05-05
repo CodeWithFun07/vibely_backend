@@ -670,8 +670,8 @@ class UserService {
 
     const user = await User.findById(userId);
 
-    if (!userId) {
-      throw new ApiError(403, "user not found");
+    if (!user) {
+      throw new ApiError(404, "user not found");
     }
 
     const storedOtp = await client.get(`reactivate:${user.email}`);

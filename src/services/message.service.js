@@ -5,7 +5,7 @@ import ApiError from "../utils/apiError.js";
 import { uploadMultipleToCloudinary } from "../utils/cloudinaryUpload.js";
 import { extractMentions, getUserIdsFromUsernames } from "../utils/mentionHelper.js";
 import {
-  emitMessageToParticipants,
+  emitMessageToChat,
   emitMessageSeen,
   emitChatMessageMutation,
 } from "../socket/socketEmitter.js";
@@ -69,10 +69,7 @@ class MessageService {
       })
       .lean();
 
-    const chat = await chatService.findChatForUser(senderId, chatId);
-    const participantIds = chat.participants.map(p => p.toString());
-
-    emitMessageToParticipants(participantIds, populatedMessage);
+    emitMessageToChat(chatId, populatedMessage);
     return populatedMessage;
   }
 
@@ -194,7 +191,25 @@ class MessageService {
     message.edited_at = new Date();
 
     await message.save();
-    return message;
+
+    const populated = await messageModel
+      .findById(message._id)
+      .populate("sender", "_id username profile.profile_picture profile.full_name")
+      .populate({
+        path: "reply_to",
+        populate: {
+          path: "sender",
+          select: "_id username profile.profile_picture profile.full_name",
+        },
+      })
+      .lean();
+
+    emitChatMessageMutation(populated.chat_id, {
+      type: "message_edited",
+      message: populated,
+    });
+
+    return populated;
   }
 
   async replyMessage(messageId, userId, content, mediaFiles = []) {
@@ -221,7 +236,8 @@ class MessageService {
       throw new ApiError(400, "Message ID is required");
     }
 
-    if (!Array.isArray(targetChatIds) || targetChatIds.length === 0) {
+    const chatIds = Array.isArray(targetChatIds) ? targetChatIds : [targetChatIds];
+    if (chatIds.length === 0) {
       throw new ApiError(400, "At least one target chat ID is required");
     }
 
@@ -230,14 +246,11 @@ class MessageService {
       throw new ApiError(404, "Original message not found");
     }
 
-    // Validate user has access to all target chats
-    for (const chatId of targetChatIds) {
-      await chatService.findChatForUser(userId, chatId);
-    }
+    const results = [];
+    for (const targetChatId of chatIds) {
+      try {
+        await chatService.findChatForUser(userId, targetChatId);
 
-    // Forward message to all target chats
-    const forwardedMessages = await Promise.all(
-      targetChatIds.map(async (targetChatId) => {
         const forwardedMessage = await messageModel.create({
           chat_id: targetChatId,
           sender: userId,
@@ -246,24 +259,24 @@ class MessageService {
           media: originalMessage.media,
           mentions: originalMessage.mentions,
           reply_to: null,
+          is_forwarded: true,
         });
 
         await chatModel.findByIdAndUpdate(targetChatId, { lastMessage: forwardedMessage._id });
         
-        const chat = await chatModel.findById(targetChatId);
-        const participantIds = chat.participants.map(p => p.toString());
-
-        const forwardedLean = await messageModel
+        const populated = await messageModel
           .findById(forwardedMessage._id)
           .populate("sender", "_id username profile.profile_picture profile.full_name")
           .lean();
-        
-        emitMessageToParticipants(participantIds, forwardedLean);
-        return forwardedMessage;
-      })
-    );
 
-    return forwardedMessages;
+        emitMessageToChat(targetChatId, populated);
+        results.push(populated);
+      } catch (error) {
+        console.error(`Error forwarding to chat ${targetChatId}:`, error);
+      }
+    }
+
+    return results;
   }
 
   async markAsSeen(chatId, userId) {
@@ -412,7 +425,25 @@ class MessageService {
     }
 
     await message.save();
-    return message;
+    
+    const populated = await messageModel
+      .findById(message._id)
+      .populate("sender", "_id username profile.profile_picture profile.full_name")
+      .populate({
+        path: "reply_to",
+        populate: {
+          path: "sender",
+          select: "_id username profile.profile_picture profile.full_name",
+        },
+      })
+      .lean();
+
+    emitChatMessageMutation(populated.chat_id, {
+      type: "message_reaction_updated",
+      message: populated,
+    });
+
+    return populated;
   }
 
   async removeReaction(messageId, userId) {
@@ -435,7 +466,25 @@ class MessageService {
     );
 
     await message.save();
-    return message;
+    
+    const populated = await messageModel
+      .findById(message._id)
+      .populate("sender", "_id username profile.profile_picture profile.full_name")
+      .populate({
+        path: "reply_to",
+        populate: {
+          path: "sender",
+          select: "_id username profile.profile_picture profile.full_name",
+        },
+      })
+      .lean();
+
+    emitChatMessageMutation(populated.chat_id, {
+      type: "message_reaction_updated",
+      message: populated,
+    });
+
+    return populated;
   }
 
   async pinMessage(messageId, userId) {
@@ -552,50 +601,6 @@ class MessageService {
     return message;
   }
 
-  async replyMessage(messageId, userId, content, mediaFiles = []) {
-    const originalMessage = await messageModel.findById(messageId);
-    if (!originalMessage) throw new ApiError(404, "Original message not found");
-
-    return this.sendMessage({
-      chatId: originalMessage.chat_id,
-      senderId: userId,
-      content,
-      mediaFiles,
-      replyTo: messageId
-    });
-  }
-
-  async forwardMessage(messageId, userId, targetChats = []) {
-    const originalMessage = await messageModel.findById(messageId);
-    if (!originalMessage) throw new ApiError(404, "Message not found");
-
-    const results = [];
-    for (const chatId of targetChats) {
-      const message = await messageModel.create({
-        chat_id: chatId,
-        sender: userId,
-        content: originalMessage.content,
-        media: originalMessage.media,
-        type: originalMessage.type,
-      });
-
-      await chatModel.findByIdAndUpdate(chatId, { lastMessage: message._id });
-
-      const populated = await messageModel
-        .findById(message._id)
-        .populate("sender", "_id username profile.profile_picture profile.full_name")
-        .lean();
-
-      const chat = await chatService.findChatForUser(userId, chatId);
-      const participantIds = chat.participants.map(p => p.toString());
-
-      emitMessageToParticipants(participantIds, populated);
-      
-      results.push(populated);
-    }
-    return results;
-  }
-
   async _resolveMentions(text) {
     if (!text || !text.trim()) {
       return [];
@@ -606,7 +611,7 @@ class MessageService {
       return [];
     }
 
-    return getUserIdsFromUsernames(usernames);
+    return await getUserIdsFromUsernames(usernames);
   }
 }
 
