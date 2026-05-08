@@ -1114,7 +1114,7 @@ class PostService {
       const post = await Post.findByIdAndUpdate(
         postId,
         { $inc: { shares_count: 1 } },
-        { new: true },
+        { returnDocument: 'after' },
       ).populate(
         "created_by",
         "_id username email profile.full_name profile.profile_picture followers_count following_count posts_count",

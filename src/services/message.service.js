@@ -60,7 +60,7 @@ class MessageService {
         lastMessage: message._id,
         updatedAt: new Date() // Force update to bring chat to top of list
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     // Populate for real-time emission
@@ -109,7 +109,8 @@ class MessageService {
             path: "sender",
             select: "_id username profile.profile_picture profile.full_name",
           },
-        }),
+        })
+        .lean(),
       messageModel.countDocuments(query),
     ]);
 
@@ -279,7 +280,7 @@ class MessageService {
             lastMessage: forwardedMessage._id,
             updatedAt: new Date()
           },
-          { new: true }
+          { returnDocument: 'after' }
         );
         
         const populated = await messageModel

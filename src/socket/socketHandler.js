@@ -30,7 +30,7 @@ const setupSocket = (io) => {
               is_online: true,
               last_seen: null, // Clear last_seen when user is online
             },
-            { new: true }
+            { returnDocument: 'after' }
           );
           console.log(`✅ Updated is_online for user ${uid}`);
         } catch (dbError) {
@@ -169,7 +169,7 @@ const setupSocket = (io) => {
                 is_online: false,
                 last_seen: new Date(),
               },
-              { new: true }
+              { returnDocument: 'after' }
             );
             console.log(`✅ Updated last_seen for user ${userId}`);
           } catch (dbError) {

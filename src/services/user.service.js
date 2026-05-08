@@ -1379,7 +1379,7 @@ class UserService {
               preferences.messages !== undefined ? preferences.messages : true,
           },
         },
-        { new: true },
+        { returnDocument: 'after' },
       ).select("notification_preferences");
 
       if (!user) {
