@@ -209,7 +209,7 @@ class ChatService {
         .limit(limit)
         .populate(
           "participants",
-          "_id username profile.profile_picture profile.full_name",
+          "_id username profile.profile_picture profile.full_name is_online last_seen",
         )
         .populate("lastMessage")
         .populate({
@@ -279,7 +279,7 @@ class ChatService {
         .limit(limit)
         .populate(
           "participants",
-          "_id username profile.profile_picture profile.full_name",
+          "_id username profile.profile_picture profile.full_name is_online last_seen",
         )
         .populate("lastMessage")
         .populate({
@@ -354,7 +354,7 @@ class ChatService {
       .findById(chat._id)
       .populate(
         "participants",
-        "_id username profile.profile_picture profile.full_name",
+        "_id username profile.profile_picture profile.full_name is_online last_seen",
       )
       .populate("lastMessage")
       .populate({

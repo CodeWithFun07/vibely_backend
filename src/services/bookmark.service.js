@@ -11,59 +11,74 @@ class BookmarkService {
   async _populatePostStatus(posts, userId) {
     if (!posts || posts.length === 0) return posts;
 
+    // Filter out null posts first
+    const validPosts = posts.filter(p => p !== null && p !== undefined);
+    if (validPosts.length === 0) return [];
+
     return await Promise.all(
-      posts.map(async (post) => {
+      validPosts.map(async (post) => {
+        if (!post) return null;
+        
         const postObj = post.toObject ? post.toObject() : post;
+        if (!postObj || !postObj._id) return null;
         
-        // Get all likes for this post with user details
-        const likes = await Like.find({ 
-          liked: postObj._id, 
-          target_type: "Post" 
-        }).populate({
-          path: "liked_by",
-          select: "_id username profile.profile_picture"
-        });
+        try {
+          // Get all likes for this post with user details
+          const likes = await Like.find({ 
+            liked: postObj._id, 
+            target_type: "Post" 
+          }).populate({
+            path: "liked_by",
+            select: "_id username profile.profile_picture"
+          }).lean();
 
-        // Get user's like status if userId provided
-        let userLike = null;
-        let isLiked = false;
-        let reaction_type = null;
-        
-        if (userId) {
-          userLike = likes.find(like => like.liked_by._id.toString() === userId.toString());
-          isLiked = !!userLike;
-          reaction_type = userLike?.reaction_type || null;
-        }
-
-        // Group likes by reaction type for display
-        const likesByReaction = {};
-        likes.forEach(like => {
-          if (!likesByReaction[like.reaction_type]) {
-            likesByReaction[like.reaction_type] = [];
+          // Get user's like status if userId provided
+          let userLike = null;
+          let isLiked = false;
+          let reaction_type = null;
+          
+          if (userId && Array.isArray(likes)) {
+            userLike = likes.find(like => like.liked_by && like.liked_by._id.toString() === userId.toString());
+            isLiked = !!userLike;
+            reaction_type = userLike?.reaction_type || null;
           }
-          likesByReaction[like.reaction_type].push({
-            _id: like.liked_by._id,
-            username: like.liked_by.username,
-            profile_picture: like.liked_by.profile?.profile_picture,
-          });
-        });
 
-        return {
-          ...postObj,
-          isLiked,
-          reaction_type,
-          isBookmarked: true, // Since we're in bookmarks, always true
-          likes: likes.map(like => ({
-            _id: like.liked_by._id,
-            username: like.liked_by.username,
-            profile_picture: like.liked_by.profile?.profile_picture,
-            reaction_type: like.reaction_type,
-            createdAt: like.createdAt,
-          })),
-          likesByReaction,
-        };
+          // Group likes by reaction type for display
+          const likesByReaction = {};
+          if (Array.isArray(likes)) {
+            likes.forEach(like => {
+              if (!like.liked_by) return;
+              if (!likesByReaction[like.reaction_type]) {
+                likesByReaction[like.reaction_type] = [];
+              }
+              likesByReaction[like.reaction_type].push({
+                _id: like.liked_by._id,
+                username: like.liked_by.username,
+                profile_picture: like.liked_by.profile?.profile_picture,
+              });
+            });
+          }
+
+          return {
+            ...postObj,
+            isLiked,
+            reaction_type,
+            isBookmarked: true, // Since we're in bookmarks, always true
+            likes: (Array.isArray(likes) ? likes : []).map(like => ({
+              _id: like.liked_by._id,
+              username: like.liked_by.username,
+              profile_picture: like.liked_by.profile?.profile_picture,
+              reaction_type: like.reaction_type,
+              createdAt: like.createdAt,
+            })).filter(l => l._id),
+            likesByReaction,
+          };
+        } catch (error) {
+          console.error(`Error processing post ${postObj._id}:`, error.message);
+          return null;
+        }
       }),
-    );
+    ).then(results => results.filter(r => r !== null));
   }
 
   /**
@@ -167,6 +182,8 @@ class BookmarkService {
         .skip(skip)
         .limit(limit)
         .lean();
+
+        console.log(bookmarks)
 
       // Filter out null posts
       const validBookmarkPosts = bookmarks

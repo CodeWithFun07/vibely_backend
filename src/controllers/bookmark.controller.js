@@ -32,6 +32,8 @@ const getBookmarks = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
 
+  console.log(userId)
+
   if (page < 1) {
     throw new ApiError(400, "Page must be greater than 0");
   }

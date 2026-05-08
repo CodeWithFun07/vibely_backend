@@ -47,16 +47,28 @@ const setupSocket = (io) => {
           if (user && user.is_active) { // Only broadcast if user is active
             userDetailsMap.set(uid, { username: user.username });
             
+            // Get all chats user is part of to notify participants
+            const Chat = (await import("../models/chat.model.js")).default;
+            const chats = await Chat.find({ participants: uid }).select("participants");
+            const notifyIds = new Set();
+            
+            // Add participants from chats and JOIN CHAT ROOMS
+            chats.forEach(c => {
+              const cid = String(c._id);
+              socket.join(cid);
+              console.log(`📡 User ${uid} joined room: ${cid}`);
+              c.participants.forEach(p => {
+                if (p.toString() !== uid) notifyIds.add(p.toString());
+              });
+            });
+            
+            // Also add followers to be safe
             const followers = await Follow.find({ following: uid }).select("followed_by");
-            const followerIds = followers.map(f => f.followed_by.toString());
+            followers.forEach(f => notifyIds.add(f.followed_by.toString()));
             
-            if (followerIds.length > 0) {
-              userFollowersMap.set(uid, new Set(followerIds));
-            }
-            
-            // Broadcast online status to followers
-            followerIds.forEach((followerId) => {
-              io.to(followerId).emit("user status changed", {
+            // Broadcast online status
+            notifyIds.forEach((targetId) => {
+              io.to(targetId).emit("user status changed", {
                 userId: uid,
                 username: user?.username || "A user",
                 status: "online",
@@ -64,7 +76,7 @@ const setupSocket = (io) => {
               });
             });
             
-            console.log(`📢 Broadcasted online status to ${followerIds.length} followers`);
+            console.log(`📢 Broadcasted online status to ${notifyIds.size} users`);
           }
         } catch (error) {
           console.error("Error fetching followers:", error.message);
@@ -165,14 +177,26 @@ const setupSocket = (io) => {
           }
           
           // Get followers and broadcast offline status
+          // Get all chats user is part of to notify participants
           try {
+            const Chat = (await import("../models/chat.model.js")).default;
             const Follow = (await import("../models/follow.model.js")).default;
-            const followers = await Follow.find({ following: userId }).select("followed_by");
-            const followerIds = followers.map(f => f.followed_by.toString());
             
-            // Broadcast offline status to followers
-            followerIds.forEach((followerId) => {
-              io.to(followerId).emit("user status changed", {
+            const chats = await Chat.find({ participants: userId }).select("participants");
+            const notifyIds = new Set();
+            
+            chats.forEach(c => {
+              c.participants.forEach(p => {
+                if (p.toString() !== userId) notifyIds.add(p.toString());
+              });
+            });
+            
+            const followers = await Follow.find({ following: userId }).select("followed_by");
+            followers.forEach(f => notifyIds.add(f.followed_by.toString()));
+            
+            // Broadcast offline status
+            notifyIds.forEach((targetId) => {
+              io.to(targetId).emit("user status changed", {
                 userId,
                 username: userDetails?.username || "A user",
                 status: "offline",
@@ -180,7 +204,7 @@ const setupSocket = (io) => {
               });
             });
             
-            console.log(`📢 Broadcasted offline status to ${followerIds.length} followers`);
+            console.log(`📢 Broadcasted offline status to ${notifyIds.size} users`);
           } catch (error) {
             console.error("Error broadcasting offline status:", error.message);
           }

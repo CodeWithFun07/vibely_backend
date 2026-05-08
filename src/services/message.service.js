@@ -54,7 +54,14 @@ class MessageService {
       mentions,
     });
 
-    await chatModel.findByIdAndUpdate(chatId, { lastMessage: message._id });
+    const chat = await chatModel.findByIdAndUpdate(
+      chatId, 
+      { 
+        lastMessage: message._id,
+        updatedAt: new Date() // Force update to bring chat to top of list
+      },
+      { new: true }
+    );
 
     // Populate for real-time emission
     const populatedMessage = await messageModel
@@ -266,7 +273,14 @@ class MessageService {
           is_forwarded: true,
         });
 
-        await chatModel.findByIdAndUpdate(targetChatId, { lastMessage: forwardedMessage._id });
+        const chat = await chatModel.findByIdAndUpdate(
+          targetChatId, 
+          { 
+            lastMessage: forwardedMessage._id,
+            updatedAt: new Date()
+          },
+          { new: true }
+        );
         
         const populated = await messageModel
           .findById(forwardedMessage._id)
