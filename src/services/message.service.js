@@ -58,7 +58,13 @@ class MessageService {
       chatId, 
       { 
         lastMessage: message._id,
-        updatedAt: new Date() // Force update to bring chat to top of list
+        updatedAt: new Date(), // Force update to bring chat to top of list
+        $pull: { 
+          archived_by: senderId // Auto-unarchive sender
+        },
+        $set: {
+          deleted_by: [] // Clear deleted_by to restore chat for all participants
+        }
       },
       { returnDocument: 'after' }
     );
@@ -93,6 +99,7 @@ class MessageService {
 
     const query = {
       chat_id: chatId,
+      deleted_for_everyone: false,
       "deleted_for.user": { $ne: userId },
     };
 

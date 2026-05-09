@@ -73,7 +73,7 @@ class ChatService {
 
     const existingChat = await chatModel.findOne({
       isGroup: false,
-      isDeleted: false,
+      deleted_by: { $ne: senderId },
       participants: { $all: [senderId, recieverId] },
     });
 
@@ -196,7 +196,7 @@ class ChatService {
     const skip = Math.max(0, page - 1) * limit;
     const query = { 
       participants: userId, 
-      isDeleted: false,
+      deleted_by: { $ne: userId },
       archived_by: { $ne: userId },
       is_archived: { $ne: true } // Backward compatibility
     };
@@ -235,6 +235,7 @@ class ChatService {
           chat_id: chat._id,
           sender: { $ne: userId },
           deleted_for_everyone: false,
+          "deleted_for.user": { $ne: userId },
           "seenBy.user": { $ne: userId },
         });
         return { ...chat, unread_count: unreadCount };
@@ -264,7 +265,7 @@ class ChatService {
     const skip = Math.max(0, page - 1) * limit;
     const query = { 
       participants: userId, 
-      isDeleted: false,
+      deleted_by: { $ne: userId },
       $or: [
         { archived_by: userId },
         { is_archived: true } // Backward compatibility
@@ -304,6 +305,7 @@ class ChatService {
           chat_id: chat._id,
           sender: { $ne: userId },
           deleted_for_everyone: false,
+          "deleted_for.user": { $ne: userId },
           "seenBy.user": { $ne: userId },
         });
         return { ...chat, unread_count: unreadCount };
@@ -332,7 +334,7 @@ class ChatService {
 
     const chats = await chatModel.find({
       participants: userId,
-      isDeleted: false,
+      deleted_by: { $ne: userId },
     }).select("_id");
 
     const chatIds = chats.map(chat => chat._id);
@@ -341,6 +343,7 @@ class ChatService {
       chat_id: { $in: chatIds },
       sender: { $ne: userId },
       deleted_for_everyone: false,
+      "deleted_for.user": { $ne: userId },
       "seenBy.user": { $ne: userId },
     });
 
@@ -444,7 +447,36 @@ class ChatService {
 
   async deleteChat({ userId, chatId }) {
     const chat = await this.findChatForUser(userId, chatId);
-    chat.isDeleted = true;
+    
+    // Ensure deleted_by is an array
+    if (!Array.isArray(chat.deleted_by)) {
+      chat.deleted_by = [];
+    }
+
+    // Check if user has already deleted this chat
+    const isDeleted = chat.deleted_by.some(id => id.toString() === userId.toString());
+    
+    if (!isDeleted) {
+      chat.deleted_by.push(userId);
+      
+      // Mark all previous messages as deleted_for this user
+      // So they won't see old messages if chat is restored
+      await messageModel.updateMany(
+        { 
+          chat_id: chatId,
+          "deleted_for.user": { $ne: userId }
+        },
+        {
+          $push: {
+            deleted_for: {
+              user: userId,
+              deleted_at: new Date(),
+            },
+          },
+        },
+      );
+    }
+    
     await chat.save();
 
     return {
@@ -490,7 +522,7 @@ class ChatService {
       {
         chat_id: chatId,
         deleted_for_everyone: false,
-        $nor: [{ deleted_for: { $elemMatch: { user: userId } } }],
+        "deleted_for.user": { $ne: userId },
       },
       {
         $push: {
@@ -506,7 +538,7 @@ class ChatService {
       .findOne({
         chat_id: chatId,
         deleted_for_everyone: false,
-        $nor: [{ deleted_for: { $elemMatch: { user: userId } } }],
+        "deleted_for.user": { $ne: userId },
       })
       .sort({ createdAt: -1 })
       .select("_id")
@@ -993,7 +1025,7 @@ class ChatService {
     const chat = await chatModel.findOne({
       _id: chatId,
       participants: userId,
-      isDeleted: false,
+      deleted_by: { $ne: userId },
     });
 
     if (!chat) {

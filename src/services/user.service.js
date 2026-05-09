@@ -1021,10 +1021,14 @@ class UserService {
       isFollowing = !!follow;
     }
 
+    const userObj = user.toObject();
     const publicProfilePayload = {
       message: "User profile retrieved successfully",
       user: {
-        ...user.toObject(),
+        ...userObj,
+        followers_count: followersCount,
+        following_count: followingCount,
+        posts_count: postsCount,
         stats: {
           postsCount,
           followersCount,

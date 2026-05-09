@@ -190,7 +190,7 @@ class PostService {
       // Populate and return the created post
       const populatedPost = await post.populate(
         "created_by",
-        "username avatar",
+        "_id username email profile.full_name profile.profile_picture followers_count following_count posts_count",
       );
 
       // Handle mentions
@@ -201,6 +201,9 @@ class PostService {
           post: post._id,
         });
       }
+
+      // Update user posts count
+      await User.findByIdAndUpdate(userId, { $inc: { posts_count: 1 } });
 
       const creator = await User.findById(userId).select("username").lean();
       await invalidateUserProfileCaches(userId, creator?.username);
@@ -443,6 +446,9 @@ class PostService {
     post.deleted_at = new Date();
     await post.save();
 
+    // Update user posts count
+    await User.findByIdAndUpdate(userId, { $inc: { posts_count: -1 } });
+
     await invalidatePostDetailCache(postId);
 
     return { message: "post deleted successfully" };
@@ -528,9 +534,8 @@ class PostService {
         .populate({
           path: "created_by",
           match: {
-            // Only include posts from active, verified users
+            // Only include posts from active users
             is_active: true,
-            is_verified: true,
             is_banned: false,
             isDeleted: false,
           },
@@ -734,7 +739,6 @@ class PostService {
           path: "created_by",
           match: {
             is_active: true,
-            is_verified: true,
             is_banned: false,
             isDeleted: false,
           },
@@ -836,7 +840,6 @@ class PostService {
           path: "created_by",
           match: {
             is_active: true,
-            is_verified: true,
             is_banned: false,
             isDeleted: false,
           },

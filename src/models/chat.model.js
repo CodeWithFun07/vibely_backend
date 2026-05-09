@@ -88,6 +88,14 @@ const chatSchema = new Schema(
       default: false,
     },
 
+    // Track which users deleted this chat (per-user deletion)
+    deleted_by: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
     // Archive support (per user)
     archived_by: [
       {
