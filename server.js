@@ -11,6 +11,8 @@ dns.setDefaultResultOrder("ipv4first");
 
 
 console.log("new");
+
+console.log("check env variables --->")
 const PORT = process.env.PORT || 5000;
 
 // Connect to Database and start server
