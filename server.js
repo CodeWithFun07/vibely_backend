@@ -9,6 +9,8 @@ dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 dns.setDefaultResultOrder("ipv4first");
 
+
+console.log("new");
 const PORT = process.env.PORT || 5000;
 
 // Connect to Database and start server
